@@ -1,44 +1,85 @@
-1) `utmos cvt --in in.vcf --out out.jl --af --compress 3`
-Convert VCF to a joblib matrix of present or not 
---af
-Attempts to pull 'AF' 
-if not available
->>> ac = g.count_alleles()
->>> ac.to_frequencies()
+# UTMOS
 
---in (default stdin)
---out (hdf5 for now, I guess?)
+A reimplementation of [SVCollector](https://github.com/fritzsedlazeck/SVCollector)
 
-2) utmos calc --out required.txt \*files [--safe]
-Calculate the greedy on inputs
+SVCollector is a tool for solving the maximum-coverage problem for sample selection. Utmos is a python port of that code
+that leverages scikit-allel, numpy, and joblib. Utmos is designed for extremely large cohorts by allowing subsets of
+variants to be parsed and stored as small(ish) intermediate files before concatenating during the selection step.
 
---vcf (default = False)
-# parse args decides if we're doing vcfs (in-memory or not)
-# this makes me belive we can't do hdf5 because of it is directly to a file...
-If args.vcf:
-	for i in args[:]:
-		# param for in memory?
-		utmos cvt i (tmpfile)
-		args.inputs.append(result)
+## Install
 
-open each args.inputs and concat (tiny memory hopefully)
+After cloning the repository, 
+```bash
+cd utmos/
+python3 -m pip install . 
+```
 
---safe
-Ensure that the sample names are the same between each of the parts
+## Quick Start
 
---count
-How many samples to pick (so we can eventually stop, if it is a float (pick a percent) if int, take the count
-Interpret 1 as 1%
+Simplest use case:
 
-[maybe]
---af
-Use AF for something? IDK
-Use the AF data from above
+```bash
+utmos select input1.vcf
+```
+
+Conversion of a vcf to joblib
+
+```bash
+utmos convert input1.vcf input1.jl
+```
+
+See `--help` of commands for more details.
+
+## utmos convert
+
+Pulls information from `vcf[.gz]` into numpy arrays and saves using joblib.
+
+usage: convert [-h] [-c COMPRESS] in_file out_file
+
+positional arguments:
+  in_file               Input VCF
+  out_file              Output joblib
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -c COMPRESS, --compress COMPRESS
+                        joblib compress level 1-9 (5)
+```
+
+Future features
+* `--af` atempts to pull AF, calculates if AF not available
+
+## utmos select
+
+Select samples for validation and resequencing
+
+```
+usage: select [-h] [-o OUT] [-k KEEP] [--safe] in_files [in_files ...]
+
+positional arguments:
+  in_files              Input VCF or jl files
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -o OUT, --out OUT     Output file (stdout)
+  -k KEEP, --keep KEEP  Number of samples to select as a percent if <1 or
+                        count if >=1 (0.02)
+  --safe                Ensure input files have same sample names
+```
+
+Future features:
+* `--mode` : greedy (default) random, topN 
+* `--af` : take allele frequency into account
+* `--include` : file (or comma-separated list) of samples to force inclusion
+* `--exclude` : file (or comma-separated list) of samples to exclude from inclusion
+* `--weights` : file of samples and their weights
+
+
+## Performace metrics
+Utmos is upto 4 times faster than SVCollector but uses more memory
 
 --mode [greedy, topN, random]
 
-3) `utmos plot output.txt`
-make the curves with seaborn/pandas (easy enough)
-do we want metadata to color it by... --meta [sample\tlabel]
-and just throw it in a svg or png in that order
+## utmos plot
 
+Future feature. Will make plots for the `select` output. Will have to figure out `--meta`
