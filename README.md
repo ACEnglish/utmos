@@ -34,6 +34,7 @@ See `--help` of commands for more details.
 
 Pulls information from `vcf[.gz]` into numpy arrays and saves using joblib.
 
+```
 usage: convert [-h] [-c COMPRESS] in_file out_file
 
 positional arguments:
