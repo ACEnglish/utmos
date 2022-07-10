@@ -5,6 +5,7 @@ import argparse
 import joblib
 import truvari
 import numpy as np
+import pandas as pd
 
 from utmos.convert import read_vcf
 
@@ -24,6 +25,8 @@ def parse_args(args):
                         help="Number of samples to select as a percent if <1 or count if >=1 (%(default)s)")
     parser.add_argument("--af", action="store_true",
                         help="Weigh variants by allele frequency")
+    parser.add_argument("--weights", type=str, default=None,
+                        help="Tab-delimited file of sample weights")
     parser.add_argument("--include", type=str, default=None,
                         help="Filename with or Comma-separated list of samples to force selection")
     parser.add_argument("--exclude", type=str, default=None,
@@ -32,7 +35,7 @@ def parse_args(args):
     truvari.setup_logging()
     return args
 
-def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af):
+def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weights):
     """
     Greedy calculation
     yields list of samples
@@ -62,8 +65,16 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af):
         cur_sample_count = cur_view.sum(axis=0)
 
         # use the sample with the most variants 
+        # incorporate weights if needed
+        cur_sample_weighted = None
         if af is not None:
             cur_sample_weighted = (cur_view * af[~variant_mask]).sum(axis=0)
+        if weights is not None:
+            if cur_sample_weighted is None:
+                cur_sample_weighted = cur_sample_count.copy()
+            cur_sample_weighted = cur_sample_weighted * weights
+
+        if af is not None or weights is not None:
             use_sample = np.argmax(cur_sample_weighted[exclude_mask])
         else:
             use_sample = np.argmax(cur_sample_count[exclude_mask])
@@ -84,7 +95,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af):
                upto_now, round(upto_now / num_vars, 4)]
 
 
-def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=False):
+def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=False, weights=None):
     """
     Do the selection calculation
     if max_reporting [0,1], select that percent of samples
@@ -110,16 +121,23 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
     else:
         max_reporting = int(max_reporting)
 
-    #sample_mask = np.zeros(num_samples, dtype='bool') # used samples
 
     logging.info(f"Sample Count {num_samples}")
     logging.info(f"Variant Count {num_vars}")
 
+    #sample_mask = np.zeros(num_samples, dtype='bool') # used samples
+    sample_weights = None
+    if weights is not None:
+        sample_weights = np.zeros(num_samples) + 1
+        for pos, i in enumerate(vcf_samples):
+            if i in weights.index:
+                sample_weights[pos] = weights.loc[i]
+                
     # Okay, I accidentally implemented the greedy approach... 
     # So I'm curious how topN works, but until then, whatever
     with open(out_fn, 'w') as out:
         out.write("sample\tvarcount\tnew_count\ttot_captured\tpct_captured\n")
-        for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af_data):
+        for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af_data, sample_weights):
             out.write("\t".join([str(_) for _ in result]) + '\n')
            
 
@@ -162,6 +180,17 @@ def parse_sample_lists(argument):
         ret = argument.split(",")
     return ret
 
+def parse_weights(argument):
+    """
+    Parse the weights file
+    """
+    if not argument:
+        return None
+    data = pd.read_csv(argument, sep='\t', header=None)
+    data.columns = ['sample', 'weight']
+    data.set_index('sample', inplace=True)
+    return data
+
 def select_main(cmdargs):
     """
     Main
@@ -171,8 +200,11 @@ def select_main(cmdargs):
     data = load_files(args.in_files, args.lowmem, args.af)
     args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)
+    args.weights = parse_weights(args.weights)
 
-    calculate(data, args.out, args.count, args.include, args.exclude, args.af)
+    calculate(data, args.out, args.count,
+              args.include, args.exclude,
+              args.af, args.weights)
 
     logging.info("Finished")
 

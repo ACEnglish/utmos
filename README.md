@@ -46,9 +46,8 @@ optional arguments:
 Select samples for validation and resequencing
 
 ```
-utmos select -h
-usage: select [-h] [--lowmem] [-o OUT] [-c COUNT] [--af] [--include INCLUDE]
-              [--exclude EXCLUDE]
+usage: select [-h] [--lowmem] [-o OUT] [-c COUNT] [--af] [--weights WEIGHTS]
+              [--include INCLUDE] [--exclude EXCLUDE]
               in_files [in_files ...]
 
 positional arguments:
@@ -63,6 +62,7 @@ optional arguments:
                         Number of samples to select as a percent if <1 or
                         count if >=1 (0.02)
   --af                  Weigh variants by allele frequency
+  --weights WEIGHTS     Tab-delimited file of sample weights
   --include INCLUDE     Filename with or Comma-separated list of samples to
                         force selection
   --exclude EXCLUDE     Filename with or Comma-separated list of samples to
@@ -71,7 +71,6 @@ optional arguments:
 
 Future features:
 * `--mode` : greedy (default), random, topN 
-* `--weights` : file of samples and their weights
 
 ## Performace metrics
 Using chr22 from 1kgp genotype  
