@@ -24,7 +24,7 @@ setup(
     url="https://github.com/acenglish/utmos",
     packages=['utmos'],
     license='MIT',
-    description="A reimplementation of SVCollector",
+    description="Maximum-coverage algorithm for genomic variants",
     long_description=open('README.md', encoding='UTF-8').read(),
     long_description_content_type='text/markdown',
     entry_points={
