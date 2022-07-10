@@ -50,9 +50,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
     sample_mask = np.isin(vcf_samples, exclude)
     logging.info(f"Excluding {sample_mask.sum()} samples")
 
-    # force includes first
-    if include:
-        logging.info(f"Including {len(include)} samples")
+    logging.info(f"Including {len(include)} samples")
 
     for inc in include:
         use_sample = np.where(vcf_samples == inc)[0][0]
@@ -104,7 +102,6 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
 
-
 def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=False, weights=None):
     """
     Do the selection calculation
@@ -121,16 +118,11 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
     num_samples = v_count.shape[1]
     num_vars = v_count.shape[0]
 
-    if max_reporting < 1:
-        max_reporting = int(num_samples * max_reporting)
-    else:
-        max_reporting = int(max_reporting)
-
-
+    max_reporting = int(num_samples * max_reporting) if max_reporting < 1 else int(max_reporting)
+    
     logging.info(f"Sample Count {num_samples}")
     logging.info(f"Variant Count {num_vars}")
 
-    #sample_mask = np.zeros(num_samples, dtype='bool') # used samples
     sample_weights = None
     if weights is not None:
         sample_weights = np.zeros(num_samples) + 1
@@ -138,13 +130,10 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
             if i in weights.index:
                 sample_weights[pos] = weights.loc[i]
 
-    # Okay, I accidentally implemented the greedy approach...
-    # So I'm curious how topN works, but until then, whatever
     with open(out_fn, 'w') as out:
         out.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
         for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af_data, sample_weights):
             out.write("\t".join([str(_) for _ in result]) + '\n')
-
 
 def samp_same(a, b):
     """
@@ -175,6 +164,7 @@ def load_files(in_files, lowmem=False, af=False):
         gt_parts.append(p['GT'])
         if af:
             af_parts.append(p['AF'])
+
     logging.info("Concatenating")
     ret =  {'GT':np.concatenate(gt_parts),
             'samples':samples}
