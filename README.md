@@ -46,7 +46,8 @@ optional arguments:
 Select samples for validation and resequencing
 
 ```
-usage: select [-h] [--lowmem] [-o OUT] [-c COUNT] [--safe] [--include INCLUDE]
+utmos select -h
+usage: select [-h] [--lowmem] [-o OUT] [-c COUNT] [--af] [--include INCLUDE]
               [--exclude EXCLUDE]
               in_files [in_files ...]
 
@@ -61,7 +62,6 @@ optional arguments:
   -c COUNT, --count COUNT
                         Number of samples to select as a percent if <1 or
                         count if >=1 (0.02)
-  --safe                Ensure input files have same sample names
   --af                  Weigh variants by allele frequency
   --include INCLUDE     Filename with or Comma-separated list of samples to
                         force selection

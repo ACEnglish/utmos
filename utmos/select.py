@@ -22,8 +22,6 @@ def parse_args(args):
                         help="Output file (stdout)")
     parser.add_argument("-c", "--count", type=float, default=0.02,
                         help="Number of samples to select as a percent if <1 or count if >=1 (%(default)s)")
-    parser.add_argument("--safe", action='store_true',
-                        help="Ensure input files have same sample names")
     parser.add_argument("--af", action="store_true",
                         help="Weigh variants by allele frequency")
     parser.add_argument("--include", type=str, default=None,
@@ -125,7 +123,7 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
             out.write("\t".join([str(_) for _ in result]) + '\n')
            
 
-def load_files(in_files, safe=False, lowmem=False, af=False):
+def load_files(in_files, lowmem=False, af=False):
     """
     Load and concatenate multiple files
     """
@@ -140,8 +138,8 @@ def load_files(in_files, safe=False, lowmem=False, af=False):
             p = joblib.load(i)
         if samples is None:
             samples = p['samples']
-        elif safe:
-            assert samples == p['samples']
+        elif samples != p['samples']:
+            logging.critical(f"Different sample order in {i}")
         
         gt_parts.append(p['GT'])
         af_parts.append(p['AF'])
@@ -170,7 +168,7 @@ def select_main(cmdargs):
     """
     args = parse_args(cmdargs)
     
-    data = load_files(args.in_files, args.safe, args.lowmem, args.af)
+    data = load_files(args.in_files, args.lowmem, args.af)
     args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)
 
