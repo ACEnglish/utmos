@@ -77,6 +77,20 @@ Future features:
 Future feature. Will make plots for the `select` output. Will have to figure out `--meta`
 
 ## Performace metrics
+Using chr22 from 1kgp genotype :
+
+2,504 samples x 1,103,547 variants
+
+Utmos runtime:
+```
+real	31m32.103s
+user	14m39.722s
+sys	7m20.701s
+```
+
+SVCollector runtime: (including N minutes to uncompress the VCF)
+```
+```
 Utmos is upto 4 times faster than SVCollector but uses more memory
 
 
