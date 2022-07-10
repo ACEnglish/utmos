@@ -7,7 +7,7 @@ import argparse
 
 from utmos import __version__
 from utmos.convert import cvt_main
-from utmos.calculate import calc_main
+from utmos.select import select_main
 # from utmos.plot import plot_main
 
 def version(args):
@@ -15,7 +15,7 @@ def version(args):
     print(f"Utmos v{__version__}")
 
 TOOLS = {'convert': cvt_main,
-         'select': calc_main,
+         'select': select_main,
          #'plot': plot_main
         }
 
