@@ -91,6 +91,10 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
 
         # our running total number of variants
         upto_now = variant_mask.sum()
+        # stop running if we're out of new variants
+        if new_variant_count == 0:
+            logging.warning("Ran out of new variants")
+            break
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
 
@@ -160,11 +164,14 @@ def load_files(in_files, lowmem=False, af=False):
             logging.critical(f"Different sample order in {i}")
         
         gt_parts.append(p['GT'])
-        af_parts.append(p['AF'])
+        if af:
+            af_parts.append(p['AF'])
     logging.info("Concatenating")
-    return {'GT':np.concatenate(gt_parts),
-            'samples':samples,
-            'AF': np.concatenate(af_parts)}
+    ret =  {'GT':np.concatenate(gt_parts),
+            'samples':samples}
+    if af:
+        ret['AF'] = np.concatenate(af_parts)
+    return ret
 
 def parse_sample_lists(argument):
     """

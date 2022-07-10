@@ -9,8 +9,14 @@ variants to be parsed and stored as small(ish) intermediate files before concate
 
 ## Install
 
-After cloning the repository, 
+Download a release and run
+```
+python3 -m pip install Utmos-0.1.0.tar.gz
+```
+
+Alternative, build from the repository, 
 ```bash
+git clone https://github.com/ACEnglish/utmos.git
 cd utmos/
 python3 -m pip install . 
 ```
@@ -45,6 +51,11 @@ If `utmos select --af` is going to be run, you must use `utmos convert --af`
 
 ```
 utmos convert [-h] [--lowmem] [-c COMPRESS] in_file out_file
+```
+
+VCFs can be pre-filtered and piped into convert e.g.:
+```
+bcftools view -i "AF >= 0.01" input.vcf.gz | utmos convert /dev/stdin output.jl
 ```
 
 ## utmos select
