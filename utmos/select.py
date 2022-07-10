@@ -108,11 +108,6 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
     if max_reporting [0,1], select that percent of samples
     if max_reporting >= 1, select that number of samples
     """
-    if include is None:
-        include = []
-    if exclude is None:
-        exclude = []
-
     v_count = data['GT']
     vcf_samples = data['samples']
     af_data = None
@@ -148,6 +143,13 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
             out.write("\t".join([str(_) for _ in result]) + '\n')
            
 
+def samp_same(a, b):
+    """
+    Make sure samples are identical
+    return true if they're identical
+    """
+    return len(a) == len(b) and np.equal(a, b).all()
+
 def load_files(in_files, lowmem=False, af=False):
     """
     Load and concatenate multiple files
@@ -163,8 +165,8 @@ def load_files(in_files, lowmem=False, af=False):
             p = joblib.load(i)
         if samples is None:
             samples = p['samples']
-        elif (samples != p['samples']).any():
-            logging.critical(f"Different sample order in {i}")
+        elif not samp_same(samples, p['samples']):
+            logging.critical(f"Different samples in {i}")
             exit(1)
         
         gt_parts.append(p['GT'])
@@ -218,6 +220,3 @@ def select_main(cmdargs):
               args.af, args.weights)
 
     logging.info("Finished")
-
-if __name__ == '__main__':
-    calc_main(sys.argv[1])

@@ -15,6 +15,7 @@ def version(args):
 
 TOOLS = {'convert': cvt_main,
          'select': select_main,
+         'version': version
         }
 
 USAGE = f"""\
@@ -43,7 +44,6 @@ def main():
     args = parser.parse_args()
 
     TOOLS[args.cmd](args.options)
-
 
 if __name__ == '__main__':
     main()

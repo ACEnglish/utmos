@@ -43,6 +43,9 @@ run test_help $ut
 assert_exit_code 0
 assert_equal $(fn_md5 $STDERR_FILE) $(fn_md5 $ANSDIR/help.txt)
 
+run test_version $ut version
+assert_exit_code 0
+
 
 # ------------------------------------------------------------
 #                                 conversion
@@ -115,6 +118,11 @@ run test_select_exinfile $ut select -o $OD/select_exinfile.txt -c 18 --exclude N
     --exclude $INDIR/exclude.txt $INDIR/chunk*.af.jl --weights $INDIR/weights.txt --af 
 assert_equal $(fn_md5 $OD/select_exinfile.txt) $(fn_md5 $ANSDIR/select_exin.txt)
 
+run test_select_tiny $ut select -c 20 $INDIR/chunk_tiny.vcf -o $OD/select_tiny.txt
+assert_equal $(fn_md5 $OD/select_tiny.txt) $(fn_md5 $ANSDIR/select_tiny.txt)
+
+run test_select_badsamps $ut select $INDIR/chunk_tiny.vcf $INDIR/chunk0.af.jl
+assert_exit_code 1
 
 # ------------------------------------------------------------
 #                                 coverage.py
