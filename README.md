@@ -50,7 +50,7 @@ As a test, the genotype-only chr22 snps from the 1kgp is 196M while the utmos co
 If `utmos select --af` is going to be run, you must use `utmos convert --af`
 
 ```
-utmos convert [-h] [--lowmem] [-c COMPRESS] in_file out_file
+utmos convert [-h] [--lowmem] [-c COMPRESS] [--af] in_file out_file
 ```
 
 VCFs can be pre-filtered and piped into convert e.g.:
@@ -69,7 +69,7 @@ utmos select [-h] [--lowmem] [-o OUT] [-c COUNT] [--af] [--weights WEIGHTS]
              in_files [in_files ...]
 ```
 
-* `--count` sets how many samples are selected. 
+* `--count` sets how many samples are selected. Can be a count or a percent of samples if < 1 
 * `--af` will weigh the variants by their allele frequency, which helps reduce bias towards rare/private alleles.
 * `--weight` is a tab-delimited file of samples and a weight. Not every sample in the vcf needs to be given a 
 score in the weight file. Any sample without a provided weight is given a 1. 
