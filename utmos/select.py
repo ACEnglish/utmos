@@ -136,7 +136,7 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
     # Okay, I accidentally implemented the greedy approach... 
     # So I'm curious how topN works, but until then, whatever
     with open(out_fn, 'w') as out:
-        out.write("sample\tvarcount\tnew_count\ttot_captured\tpct_captured\n")
+        out.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
         for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af_data, sample_weights):
             out.write("\t".join([str(_) for _ in result]) + '\n')
            

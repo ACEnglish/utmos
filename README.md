@@ -29,7 +29,7 @@ Tab-delimited file of:
 
 <table><tr><th>Column</th><th>Description</th>
 <tr><td>sample</td><td>Sample name</td></tr>
-<tr><td>varcount</td><td>Number of variants in the sample</td></tr>
+<tr><td>var_count</td><td>Number of variants in the sample</td></tr>
 <tr><td>new_count</td><td>Number of new variants contributed by the sample</td></tr>
 <tr><td>tot_captured</td><td>Running total of number of variants captured by all samples upto this point</td></tr>
 <tr><td>pct_captured</td><td>Percent of all variants captured by samples upto this point</td></tr>
