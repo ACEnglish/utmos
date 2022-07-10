@@ -44,24 +44,19 @@ As a test, the genotype-only chr22 snps from the 1kgp is 196M while the utmos co
 If `utmos select --af` is going to be run, you must use `utmos convert --af`
 
 ```
-usage: convert [-h] [--lowmem] [-c COMPRESS] in_file out_file
-
-positional arguments:
-  in_file               Input VCF
-  out_file              Output joblib
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --lowmem              Lower memory usage with hdf5 temporary files (False)
-  -c COMPRESS, --compress COMPRESS
-                        joblib compress level 1-9 (5)
-  --af                  Calcluate allele frequencies (False)
+utmos convert [-h] [--lowmem] [-c COMPRESS] in_file out_file
 ```
 
 ## utmos select
 
 Select samples for validation and resequencing. Uses a greedy approach where it chooses the sample with the most
 unseen variants after each iteration. 
+
+```
+utmos select [-h] [--lowmem] [-o OUT] [-c COUNT] [--af] [--weights WEIGHTS]
+             [--include INCLUDE] [--exclude EXCLUDE]
+             in_files [in_files ...]
+```
 
 * `--count` sets how many samples are selected. 
 * `--af` will weigh the variants by their allele frequency, which helps reduce bias towards rare/private alleles.
@@ -71,29 +66,7 @@ score in the weight file. Any sample without a provided weight is given a 1.
 parameters can take a comma-separated list of sample names (e.g. samp1,samp2) or can point to a file with one sample per-line. 
 * `in_files` are one or more input files and can be a mix of vcfs or jl files from `utmos convert`. 
 
-```
-usage: select [-h] [--lowmem] [-o OUT] [-c COUNT] [--af] [--weights WEIGHTS]
-              [--include INCLUDE] [--exclude EXCLUDE]
-              in_files [in_files ...]
 
-positional arguments:
-  in_files              Input VCF or jl files
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --lowmem              Use temporary files to lower memory usage during vcf
-                        conversion (False)
-  -o OUT, --out OUT     Output file (stdout)
-  -c COUNT, --count COUNT
-                        Number of samples to select as a percent if <1 or
-                        count if >=1 (0.02)
-  --af                  Weigh variants by allele frequency
-  --weights WEIGHTS     Tab-delimited file of sample weights
-  --include INCLUDE     Filename with or Comma-separated list of samples to
-                        force selection
-  --exclude EXCLUDE     Filename with or Comma-separated list of samples to
-                        exclude selection
-```
 
 Future features:
 * `--mode` : greedy (default), random, topN 
