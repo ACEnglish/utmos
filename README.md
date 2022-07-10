@@ -80,8 +80,8 @@ Future features:
 Future feature. Will make plots for the `select` output. Will have to figure out `--meta`
 
 ## Performace metrics
-Using chr22 from 1kgp genotype
-[link](ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502//ALL.chr22.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz)
+Using chr22 from 1kgp genotype  
+`ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502//ALL.chr22.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz`
 
 2,504 samples x 1,103,547 variants
 
