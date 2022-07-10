@@ -22,12 +22,14 @@ def parse_args(args):
                         help="Lower memory usage with hdf5 temporary files (%(default)s)")
     parser.add_argument("-c", "--compress", type=int, default=5,
                         help="joblib compress level 1-9 (%(default)s)")
+    parser.add_argument("--af", action="store_true",
+                        help="Calcluate allele frequencies (%(default)s)")
 
     args = parser.parse_args(args)
     truvari.setup_logging()
     return args
 
-def read_vcf(in_file, lowmem=False):
+def read_vcf(in_file, lowmem=False, allele_freq=False):
     """
     Read a vcf's genotypes and return numpy arrays
     """
@@ -51,12 +53,19 @@ def read_vcf(in_file, lowmem=False):
     num_homs = is_hom.sum().sum()
     logging.info(f"{num_homs} homs")
     v_count = is_het | is_hom
+    
+    af = None
+    if allele_freq:
+        af = gts.count_alleles().to_frequencies()[:, 1]
 
     if lowmem:
         data = {"GT": v_count, "samples": data["samples"][:]}
     else:
         del(data["calldata/GT"])
-    data["GT"] = v_count
+        data["GT"] = v_count
+
+    if allele_freq:
+        data["AF"] = af
 
     data["stats"] = {'num_het': num_hets, 'num_hom': num_homs}
     return data
@@ -67,7 +76,7 @@ def cvt_main(cmdargs):
     """
     args = parse_args(cmdargs)
     # fields = optionaly AF (make sure its consistent with Number=[./1 whatever]
-    data = read_vcf(args.in_file, args.lowmem)
+    data = read_vcf(args.in_file, args.lowmem, args.af)
     logging.info("Saving genotypes")
     joblib.dump(data, args.out_file, compress=args.compress)
     logging.info("Finished conversion")

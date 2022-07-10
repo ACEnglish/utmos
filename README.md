@@ -38,10 +38,8 @@ optional arguments:
   --lowmem              Lower memory usage with hdf5 temporary files (False)
   -c COMPRESS, --compress COMPRESS
                         joblib compress level 1-9 (5)
+  --af                  Calcluate allele frequencies (False)
 ```
-
-Future features
-* `--af` atempts to pull AF, calculates if AF not available
 
 ## utmos select
 
@@ -64,6 +62,7 @@ optional arguments:
                         Number of samples to select as a percent if <1 or
                         count if >=1 (0.02)
   --safe                Ensure input files have same sample names
+  --af                  Weigh variants by allele frequency
   --include INCLUDE     Filename with or Comma-separated list of samples to
                         force selection
   --exclude EXCLUDE     Filename with or Comma-separated list of samples to
@@ -72,12 +71,7 @@ optional arguments:
 
 Future features:
 * `--mode` : greedy (default), random, topN 
-* `--af` : take allele frequency into account
 * `--weights` : file of samples and their weights
-
-## utmos plot
-
-Future feature. Will make plots for the `select` output. Will have to figure out `--meta`
 
 ## Performace metrics
 Using chr22 from 1kgp genotype  

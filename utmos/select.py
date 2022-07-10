@@ -24,6 +24,8 @@ def parse_args(args):
                         help="Number of samples to select as a percent if <1 or count if >=1 (%(default)s)")
     parser.add_argument("--safe", action='store_true',
                         help="Ensure input files have same sample names")
+    parser.add_argument("--af", action="store_true",
+                        help="Weigh variants by allele frequency")
     parser.add_argument("--include", type=str, default=None,
                         help="Filename with or Comma-separated list of samples to force selection")
     parser.add_argument("--exclude", type=str, default=None,
@@ -32,14 +34,13 @@ def parse_args(args):
     truvari.setup_logging()
     return args
 
-def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude):
+def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af):
     """
     Greedy calculation
     yields list of samples
     """
     num_vars = v_count.shape[0]
     num_samps = v_count.shape[1]
-
     variant_mask = np.zeros(num_vars, dtype='bool')
     # get rid of exclude up front
     exclude_mask = ~np.isin(vcf_samples, exclude)
@@ -61,8 +62,13 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude):
         cur_view = v_count[~variant_mask]
         # how many variants per sample
         cur_sample_count = cur_view.sum(axis=0)
+
         # use the sample with the most variants 
-        use_sample = np.argmax(cur_sample_count[exclude_mask])
+        if af is not None:
+            cur_sample_weighted = (cur_view * af[~variant_mask]).sum(axis=0)
+            use_sample = np.argmax(cur_sample_weighted[exclude_mask])
+        else:
+            use_sample = np.argmax(cur_sample_count[exclude_mask])
 
         # how many does this sample have overall?
         use_sample_variant_count = v_count[:,use_sample].sum()
@@ -80,7 +86,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude):
                upto_now, round(upto_now / num_vars, 4)]
 
 
-def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None):
+def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=False):
     """
     Do the selection calculation
     if max_reporting [0,1], select that percent of samples
@@ -93,6 +99,10 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None):
 
     v_count = data['GT']
     vcf_samples = data['samples']
+    af_data = None
+    if af:
+        af_data = data["AF"]
+        af_data = af_data.reshape(af_data.shape[0], 1)
 
     num_samples = v_count.shape[1]
     num_vars = v_count.shape[0]
@@ -111,20 +121,21 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None):
     # So I'm curious how topN works, but until then, whatever
     with open(out_fn, 'w') as out:
         out.write("sample\tvarcount\tnew_count\ttot_captured\tpct_captured\n")
-        for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude):
+        for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af_data):
             out.write("\t".join([str(_) for _ in result]) + '\n')
            
 
-def load_files(in_files, safe=False, lowmem=False):
+def load_files(in_files, safe=False, lowmem=False, af=False):
     """
     Load and concatenate multiple files
     """
     logging.info(f"Loading {len(in_files)} files")
     samples = None
-    parts = []
+    gt_parts = []
+    af_parts = []
     for i in in_files:
         if i.endswith((".vcf.gz", ".vcf")):
-            p = read_vcf(i, lowmem)
+            p = read_vcf(i, lowmem, af)
         elif i.endswith(".jl"):
             p = joblib.load(i)
         if samples is None:
@@ -132,9 +143,12 @@ def load_files(in_files, safe=False, lowmem=False):
         elif safe:
             assert samples == p['samples']
         
-        parts.append(p['GT'])
+        gt_parts.append(p['GT'])
+        af_parts.append(p['AF'])
     logging.info("Concatenating")
-    return {'GT':np.concatenate(parts), 'samples':samples}
+    return {'GT':np.concatenate(gt_parts),
+            'samples':samples,
+            'AF': np.concatenate(af_parts)}
 
 def parse_sample_lists(argument):
     """
@@ -156,11 +170,11 @@ def select_main(cmdargs):
     """
     args = parse_args(cmdargs)
     
-    data = load_files(args.in_files, args.safe, args.lowmem)
+    data = load_files(args.in_files, args.safe, args.lowmem, args.af)
     args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)
 
-    calculate(data, args.out, args.count, args.include, args.exclude)
+    calculate(data, args.out, args.count, args.include, args.exclude, args.af)
 
     logging.info("Finished")
 

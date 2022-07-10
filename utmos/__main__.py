@@ -8,7 +8,6 @@ import argparse
 from utmos import __version__
 from utmos.convert import cvt_main
 from utmos.select import select_main
-# from utmos.plot import plot_main
 
 def version(args):
     """Print the version"""
@@ -16,7 +15,6 @@ def version(args):
 
 TOOLS = {'convert': cvt_main,
          'select': select_main,
-         #'plot': plot_main
         }
 
 USAGE = f"""\
@@ -25,7 +23,6 @@ Utmos v{__version__} - Reimplementation of SVCollector
     CMDs:
         convert  Extract genotypes from VCFs
         select   Select samples
-        plot     Create qc plots (in-dev)
 """
 
 def main():
