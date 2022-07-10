@@ -18,7 +18,7 @@ TOOLS = {'convert': cvt_main,
         }
 
 USAGE = f"""\
-Utmos v{__version__} - Reimplementation of SVCollector
+Utmos v{__version__} - Maximum-coverage algorithm to select samples for validation and resequencing
 
     CMDs:
         convert  Extract genotypes from VCFs

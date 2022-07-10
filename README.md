@@ -1,9 +1,10 @@
 # UTMOS
 
-A reimplementation of [SVCollector](https://github.com/fritzsedlazeck/SVCollector)
+Maximum-coverage algorithm to select samples for validation and resequencing.
+This is a reimplementation of [SVCollector](https://github.com/fritzsedlazeck/SVCollector)
 
-SVCollector is a tool for solving the maximum-coverage problem for sample selection. Utmos is a python port of that code
-that leverages scikit-allel, numpy, and joblib. Utmos is designed for extremely large cohorts by allowing subsets of
+SVCollector is a tool for solving the maximum-coverage problem for sample selection. Utmos is a python re-write of that code
+which leverages scikit-allel, numpy, and joblib. Utmos is designed for extremely large cohorts by allowing subsets of
 variants to be parsed and stored as small(ish) intermediate files before concatenating during the selection step.
 
 ## Install
@@ -22,9 +23,25 @@ utmos select input1.vcf
 
 See `--help` of commands for more details.
 
+## Output format
+
+Tab-delimited file of:
+
+<table><tr><th>Column</th><th>Description</th>
+<tr><td>sample</td><td>Sample name</td></tr>
+<tr><td>varcount</td><td>Number of variants in the sample</td></tr>
+<tr><td>new_count</td><td>Number of new variants contributed by the sample</td></tr>
+<tr><td>tot_captured</td><td>Running total of number of variants captured by all samples upto this point</td></tr>
+<tr><td>pct_captured</td><td>Percent of all variants captured by samples upto this point</td></tr>
+</table>
+
 ## utmos convert
 
 Pulls information from `vcf[.gz]` into numpy arrays and saves using joblib.
+This step is optional, but makes it easier to convert multiple VCFs at once (with separate jobs).
+As a test, the genotype-only chr22 snps from the 1kgp is 196M while the utmos converted file is 64M.
+
+If `utmos select --af` is going to be run, you must use `utmos convert --af`
 
 ```
 usage: convert [-h] [--lowmem] [-c COMPRESS] in_file out_file
@@ -43,7 +60,16 @@ optional arguments:
 
 ## utmos select
 
-Select samples for validation and resequencing
+Select samples for validation and resequencing. Uses a greedy approach where it chooses the sample with the most
+unseen variants after each iteration. 
+
+* `--count` sets how many samples are selected. 
+* `--af` will weigh the variants by their allele frequency, which helps reduce bias towards rare/private alleles.
+* `--weight` is a tab-delimited file of samples and a weight. Not every sample in the vcf needs to be given a 
+score in the weight file. Any sample without a provided weight is given a 1. 
+* `--include` and `--exclude` will force inclusion or exclusion of samples regardless of their score. These 
+parameters can take a comma-separated list of sample names (e.g. samp1,samp2) or can point to a file with one sample per-line. 
+* `in_files` are one or more input files and can be a mix of vcfs or jl files from `utmos convert`. 
 
 ```
 usage: select [-h] [--lowmem] [-o OUT] [-c COUNT] [--af] [--weights WEIGHTS]
