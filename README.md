@@ -9,7 +9,7 @@ variants to be parsed and stored as small(ish) intermediate files before concate
 
 ## Install
 
-Download a release and run
+Download a [release](https://github.com/ACEnglish/utmos/releases) and run
 ```
 python3 -m pip install Utmos-<version>.tar.gz
 ```
