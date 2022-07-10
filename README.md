@@ -80,7 +80,8 @@ Future features:
 Future feature. Will make plots for the `select` output. Will have to figure out `--meta`
 
 ## Performace metrics
-Using chr22 from 1kgp genotype :
+Using chr22 from 1kgp genotype
+[link](ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502//ALL.chr22.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz)
 
 2,504 samples x 1,103,547 variants
 
@@ -97,3 +98,21 @@ real	61m34.008s
 user	49m28.622s
 sys	1m24.693s
 ```
+
+## Dockerfile
+
+A Dockerfile exists to build an image of utmos. To make a Docker image, clone the repository and run
+```bash
+docker build -t utmos .
+```
+
+You can then run utmos through docker using
+```bash
+docker run -v `pwd`:/data -it utmos
+```
+Where `pwd` can be whatever directory you'd like to mount in the docker to the path `/data/`, which is the working
+directory for the utmos run. You can provide parameters directly to the entry point.
+```bash
+docker run -v `pwd`:/data -it utmos convert example.vcf.gz example.jl
+```
+
