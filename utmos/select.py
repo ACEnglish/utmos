@@ -44,15 +44,19 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
     num_samps = v_count.shape[1]
     variant_mask = np.zeros(num_vars, dtype='bool')
     # get rid of exclude up front
-    exclude_mask = ~np.isin(vcf_samples, exclude)
-    
+    sample_mask = np.isin(vcf_samples, exclude)
+    logging.info(f"Excluding {sample_mask.sum()} samples")
+
     # force includes first
+    if include:
+        logging.info(f"Including {len(include)} samples")
+
     for inc in include:
         use_sample = np.where(vcf_samples == inc)[0][0]
         cur_view = v_count[~variant_mask]
         cur_sample_count = cur_view.sum(axis=0)
         use_sample_variant_count = v_count[:,use_sample].sum()
-        new_variant_count = np.max(cur_sample_count)
+        new_variant_count = cur_view[:, use_sample].sum()
         variant_mask = variant_mask | v_count[:, use_sample]
         upto_now = variant_mask.sum()
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
@@ -62,7 +66,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         # of the variants remaining
         cur_view = v_count[~variant_mask]
         # how many variants per sample
-        cur_sample_count = cur_view.sum(axis=0)
+        cur_sample_count = np.ma.MaskedArray(cur_view.sum(axis=0), fill_value=-1, mask=sample_mask)
 
         # use the sample with the most variants 
         # incorporate weights if needed
@@ -73,21 +77,20 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
             if cur_sample_weighted is None:
                 cur_sample_weighted = cur_sample_count.copy()
             cur_sample_weighted = cur_sample_weighted * weights
-
+        
         if af is not None or weights is not None:
-            use_sample = np.argmax(cur_sample_weighted[exclude_mask])
+            use_sample = np.argmax(cur_sample_weighted)
         else:
-            use_sample = np.argmax(cur_sample_count[exclude_mask])
+            use_sample = np.argmax(cur_sample_count)
 
         # how many does this sample have overall?
         use_sample_variant_count = v_count[:,use_sample].sum()
-
         # number of new variants added
         new_variant_count = np.max(cur_sample_count)
         # don't want to use these variants anymore
         variant_mask = variant_mask | v_count[:, use_sample]
         # or this sample
-        #sample_mask[use_sample] = True
+        sample_mask[use_sample] = True
 
         # our running total number of variants
         upto_now = variant_mask.sum()
@@ -160,8 +163,9 @@ def load_files(in_files, lowmem=False, af=False):
             p = joblib.load(i)
         if samples is None:
             samples = p['samples']
-        elif samples != p['samples']:
+        elif (samples != p['samples']).any():
             logging.critical(f"Different sample order in {i}")
+            exit(1)
         
         gt_parts.append(p['GT'])
         if af:
