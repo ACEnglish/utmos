@@ -11,7 +11,7 @@ variants to be parsed and stored as small(ish) intermediate files before concate
 
 Download a release and run
 ```
-python3 -m pip install Utmos-0.1.0.tar.gz
+python3 -m pip install Utmos-0.1.1.tar.gz
 ```
 
 Alternative, build from the repository, 
