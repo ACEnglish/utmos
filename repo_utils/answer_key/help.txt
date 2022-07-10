@@ -1,0 +1,14 @@
+usage: utmos [-h] CMD ...
+
+Utmos v0.1.2 - Maximum-coverage algorithm to select samples for validation and resequencing
+
+    CMDs:
+        convert  Extract genotypes from VCFs
+        select   Select samples
+
+positional arguments:
+  CMD         Command to execute
+  OPTIONS     Options to pass to the command
+
+optional arguments:
+  -h, --help  show this help message and exit

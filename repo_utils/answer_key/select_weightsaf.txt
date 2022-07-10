@@ -1,0 +1,6 @@
+sample	var_count	new_count	tot_captured	pct_captured
+NA20320	96	101	96	0.048
+HG00280	57	54	118	0.059
+NA18570	95	45	149	0.0745
+HG03814	92	35	166	0.083
+HG02807	80	32	197	0.0985

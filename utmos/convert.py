@@ -59,7 +59,7 @@ def read_vcf(in_file, lowmem=False, allele_freq=False):
         af = gts.count_alleles().to_frequencies()[:, 1]
 
     if lowmem:
-        data = {"GT": v_count, "samples": data["samples"][:]}
+        data = {"GT": v_count, "samples": data["samples"][:].astype(str)}
     else:
         del(data["calldata/GT"])
         data["GT"] = v_count
