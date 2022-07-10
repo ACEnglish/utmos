@@ -1,4 +1,8 @@
+"""
+Select fewest samples with maximum number of variants
+"""
 import os
+import sys
 import logging
 import argparse
 
@@ -41,7 +45,6 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
     yields list of samples
     """
     num_vars = v_count.shape[0]
-    num_samps = v_count.shape[1]
     variant_mask = np.zeros(num_vars, dtype='bool')
     # get rid of exclude up front
     sample_mask = np.isin(vcf_samples, exclude)
@@ -61,14 +64,14 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         upto_now = variant_mask.sum()
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
-        
-    for i in range(max_reporting - len(include)): # picking the best N samples
+
+    for _ in range(max_reporting - len(include)): # picking the best N samples
         # of the variants remaining
         cur_view = v_count[~variant_mask]
         # how many variants per sample
         cur_sample_count = np.ma.MaskedArray(cur_view.sum(axis=0), fill_value=-1, mask=sample_mask)
 
-        # use the sample with the most variants 
+        # use the sample with the most variants
         # incorporate weights if needed
         cur_sample_weighted = None
         if af is not None:
@@ -77,7 +80,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
             if cur_sample_weighted is None:
                 cur_sample_weighted = cur_sample_count.copy()
             cur_sample_weighted = cur_sample_weighted * weights
-        
+
         if af is not None or weights is not None:
             use_sample = np.argmax(cur_sample_weighted)
         else:
@@ -134,14 +137,14 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
         for pos, i in enumerate(vcf_samples):
             if i in weights.index:
                 sample_weights[pos] = weights.loc[i]
-                
-    # Okay, I accidentally implemented the greedy approach... 
+
+    # Okay, I accidentally implemented the greedy approach...
     # So I'm curious how topN works, but until then, whatever
     with open(out_fn, 'w') as out:
         out.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
         for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af_data, sample_weights):
             out.write("\t".join([str(_) for _ in result]) + '\n')
-           
+
 
 def samp_same(a, b):
     """
@@ -167,8 +170,8 @@ def load_files(in_files, lowmem=False, af=False):
             samples = p['samples']
         elif not samp_same(samples, p['samples']):
             logging.critical(f"Different samples in {i}")
-            exit(1)
-        
+            sys.exit(1)
+
         gt_parts.append(p['GT'])
         if af:
             af_parts.append(p['AF'])
@@ -209,7 +212,7 @@ def select_main(cmdargs):
     Main
     """
     args = parse_args(cmdargs)
-    
+
     data = load_files(args.in_files, args.lowmem, args.af)
     args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)

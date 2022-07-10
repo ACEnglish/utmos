@@ -1,4 +1,6 @@
-import sys
+"""
+convert vcfs to lightweight numpy arrays
+"""
 import logging
 import argparse
 import tempfile
@@ -53,7 +55,7 @@ def read_vcf(in_file, lowmem=False, allele_freq=False):
     num_homs = is_hom.sum().sum()
     logging.info(f"{num_homs} homs")
     v_count = is_het | is_hom
-    
+
     af = None
     if allele_freq:
         af = gts.count_alleles().to_frequencies()[:, 1]
@@ -61,7 +63,7 @@ def read_vcf(in_file, lowmem=False, allele_freq=False):
     if lowmem:
         data = {"GT": v_count, "samples": data["samples"][:].astype(str)}
     else:
-        del(data["calldata/GT"])
+        del data["calldata/GT"]
         data["GT"] = v_count
 
     if allele_freq:
@@ -72,7 +74,7 @@ def read_vcf(in_file, lowmem=False, allele_freq=False):
 
 def cvt_main(cmdargs):
     """
-    Main 
+    Main
     """
     args = parse_args(cmdargs)
     # fields = optionaly AF (make sure its consistent with Number=[./1 whatever]

@@ -1,5 +1,6 @@
 # UTMOS
 ![coverage](imgs/coverage.svg)
+![pylint](imgs/pylint.svg)
 
 Maximum-coverage algorithm to select samples for validation and resequencing.
 This is a reimplementation of [SVCollector](https://github.com/fritzsedlazeck/SVCollector)

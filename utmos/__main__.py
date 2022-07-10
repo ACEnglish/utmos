@@ -9,6 +9,7 @@ from utmos import __version__
 from utmos.convert import cvt_main
 from utmos.select import select_main
 
+# pylint: disable=unused-argument
 def version(args):
     """Print the version"""
     print(f"Utmos v{__version__}")
