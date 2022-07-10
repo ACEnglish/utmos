@@ -48,7 +48,8 @@ Future features
 Select samples for validation and resequencing
 
 ```
-usage: select [-h] [--lowmem] [-o OUT] [-c COUNT] [--safe]
+usage: select [-h] [--lowmem] [-o OUT] [-c COUNT] [--safe] [--include INCLUDE]
+              [--exclude EXCLUDE]
               in_files [in_files ...]
 
 positional arguments:
@@ -63,13 +64,15 @@ optional arguments:
                         Number of samples to select as a percent if <1 or
                         count if >=1 (0.02)
   --safe                Ensure input files have same sample names
+  --include INCLUDE     Filename with or Comma-separated list of samples to
+                        force selection
+  --exclude EXCLUDE     Filename with or Comma-separated list of samples to
+                        exclude selection
 ```
 
 Future features:
-* `--mode` : greedy (default) random, topN 
+* `--mode` : greedy (default), random, topN 
 * `--af` : take allele frequency into account
-* `--include` : file (or comma-separated list) of samples to force inclusion
-* `--exclude` : file (or comma-separated list) of samples to exclude from inclusion
 * `--weights` : file of samples and their weights
 
 ## utmos plot
@@ -88,9 +91,9 @@ user	14m39.722s
 sys	7m20.701s
 ```
 
-SVCollector runtime: (including N minutes to uncompress the VCF)
+SVCollector runtime: (including 30 seconds to uncompress the VCF)
 ```
+real	61m34.008s
+user	49m28.622s
+sys	1m24.693s
 ```
-Utmos is upto 4 times faster than SVCollector but uses more memory
-
-

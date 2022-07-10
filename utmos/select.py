@@ -1,3 +1,4 @@
+import os
 import logging
 import argparse
 
@@ -23,11 +24,15 @@ def parse_args(args):
                         help="Number of samples to select as a percent if <1 or count if >=1 (%(default)s)")
     parser.add_argument("--safe", action='store_true',
                         help="Ensure input files have same sample names")
+    parser.add_argument("--include", type=str, default=None,
+                        help="Filename with or Comma-separated list of samples to force selection")
+    parser.add_argument("--exclude", type=str, default=None,
+                        help="Filename with or Comma-separated list of samples to exclude selection")
     args = parser.parse_args(args)
     truvari.setup_logging()
     return args
 
-def greedy_calc(v_count, vcf_samples, max_reporting):
+def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude):
     """
     Greedy calculation
     yields list of samples
@@ -35,15 +40,29 @@ def greedy_calc(v_count, vcf_samples, max_reporting):
     num_vars = v_count.shape[0]
     num_samps = v_count.shape[1]
 
-    variant_mask = np.zeros(num_vars, dtype='bool') # used variants
-
-    for i in range(max_reporting): # picking the best N samples
+    variant_mask = np.zeros(num_vars, dtype='bool')
+    # get rid of exclude up front
+    exclude_mask = ~np.isin(vcf_samples, exclude)
+    
+    # force includes first
+    for inc in include:
+        use_sample = np.where(vcf_samples == inc)[0][0]
+        cur_view = v_count[~variant_mask]
+        cur_sample_count = cur_view.sum(axis=0)
+        use_sample_variant_count = v_count[:,use_sample].sum()
+        new_variant_count = np.max(cur_sample_count)
+        variant_mask = variant_mask | v_count[:, use_sample]
+        upto_now = variant_mask.sum()
+        yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
+               upto_now, round(upto_now / num_vars, 4)]
+        
+    for i in range(max_reporting - len(include)): # picking the best N samples
         # of the variants remaining
         cur_view = v_count[~variant_mask]
         # how many variants per sample
         cur_sample_count = cur_view.sum(axis=0)
         # use the sample with the most variants 
-        use_sample = np.argmax(cur_sample_count)
+        use_sample = np.argmax(cur_sample_count[exclude_mask])
 
         # how many does this sample have overall?
         use_sample_variant_count = v_count[:,use_sample].sum()
@@ -61,12 +80,17 @@ def greedy_calc(v_count, vcf_samples, max_reporting):
                upto_now, round(upto_now / num_vars, 4)]
 
 
-def calculate(data, out_fn, max_reporting=0.02):
+def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None):
     """
     Do the selection calculation
     if max_reporting [0,1], select that percent of samples
     if max_reporting >= 1, select that number of samples
     """
+    if include is None:
+        include = []
+    if exclude is None:
+        exclude = []
+
     v_count = data['GT']
     vcf_samples = data['samples']
 
@@ -87,7 +111,7 @@ def calculate(data, out_fn, max_reporting=0.02):
     # So I'm curious how topN works, but until then, whatever
     with open(out_fn, 'w') as out:
         out.write("sample\tvarcount\tnew_count\ttot_captured\tpct_captured\n")
-        for result in greedy_calc(v_count, vcf_samples, max_reporting):
+        for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude):
             out.write("\t".join([str(_) for _ in result]) + '\n')
            
 
@@ -111,7 +135,21 @@ def load_files(in_files, safe=False, lowmem=False):
         parts.append(p['GT'])
     logging.info("Concatenating")
     return {'GT':np.concatenate(parts), 'samples':samples}
-            
+
+def parse_sample_lists(argument):
+    """
+    Parse the --include or --exclude argument.
+    """
+    ret = []
+    if not argument:
+        return ret
+    if os.path.exists(argument):
+        with open(argument, 'r') as fh:
+            ret = [_.strip() for _ in fh]
+    else:
+        ret = argument.split(",")
+    return ret
+
 def select_main(cmdargs):
     """
     Main
@@ -119,7 +157,10 @@ def select_main(cmdargs):
     args = parse_args(cmdargs)
     
     data = load_files(args.in_files, args.safe, args.lowmem)
-    calculate(data, args.out, args.count)
+    args.include = parse_sample_lists(args.include)
+    args.exclude = parse_sample_lists(args.exclude)
+
+    calculate(data, args.out, args.count, args.include, args.exclude)
 
     logging.info("Finished")
 
