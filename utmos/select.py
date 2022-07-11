@@ -54,14 +54,15 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
     # calculate this once
     total_variant_count = v_count.sum(axis=0)
 
+    upto_now = 0
     for inc in include:
         use_sample = np.where(vcf_samples == inc)[0][0]
         cur_view = v_count[~variant_mask]
         cur_sample_count = cur_view.sum(axis=0)
         use_sample_variant_count = total_variant_count[use_sample]
-        new_variant_count = cur_view[:, use_sample].sum()
+        new_variant_count = cur_sample_count[use_sample]
         variant_mask = variant_mask | v_count[:, use_sample]
-        upto_now = variant_mask.sum()
+        upto_now += cur_sample_count
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
 
@@ -89,18 +90,19 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         # how many does this sample have overall?
         use_sample_variant_count = total_variant_count[use_sample]
         # number of new variants added
-        new_variant_count = np.max(cur_sample_count)
+        new_variant_count = cur_sample_count[use_sample]
         # don't want to use these variants anymore
         variant_mask = variant_mask | v_count[:, use_sample]
         # or this sample
         sample_mask[use_sample] = True
 
         # our running total number of variants
-        upto_now = variant_mask.sum()
+        upto_now += new_variant_count
         # stop running if we're out of new variants
         if new_variant_count == 0:
             logging.warning("Ran out of new variants")
             break
+
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
 
@@ -121,7 +123,7 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
     num_vars = v_count.shape[0]
 
     max_reporting = int(num_samples * max_reporting) if max_reporting < 1 else int(max_reporting)
-    
+
     logging.info(f"Sample Count {num_samples}")
     logging.info(f"Variant Count {num_vars}")
 
@@ -167,11 +169,19 @@ def load_files(in_files, lowmem=False, af=False):
         if af:
             af_parts.append(p['AF'])
 
-    logging.info("Concatenating")
-    ret =  {'GT':np.concatenate(gt_parts),
-            'samples':samples}
-    if af:
-        ret['AF'] = np.concatenate(af_parts)
+    ret = None
+    if len(gt_parts) > 1:
+        logging.info("Concatenating")
+        ret =  {'GT':np.concatenate(gt_parts),
+                'samples':samples}
+        if af:
+            ret['AF'] = np.concatenate(af_parts)
+    else:
+        ret =  {'GT':gt_parts[0],
+                'samples':samples}
+        if af:
+            ret['AF'] = af_parts
+        
     return ret
 
 def parse_sample_lists(argument):

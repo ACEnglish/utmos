@@ -92,9 +92,9 @@ Running on a 2013 Mac Pro and using chr22 from 1kgp genotype
 
 Utmos runtime:
 ```
-real	31m32.103s
-user	14m39.722s
-sys	7m20.701s
+real	24m26.507s
+user	11m37.160s
+sys	5m12.713s
 ```
 
 SVCollector runtime: (including 30 seconds to uncompress the VCF)
