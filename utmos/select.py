@@ -51,12 +51,14 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
     logging.info(f"Excluding {sample_mask.sum()} samples")
 
     logging.info(f"Including {len(include)} samples")
+    # calculate this once
+    total_variant_count = v_count.sum(axis=0)
 
     for inc in include:
         use_sample = np.where(vcf_samples == inc)[0][0]
         cur_view = v_count[~variant_mask]
         cur_sample_count = cur_view.sum(axis=0)
-        use_sample_variant_count = v_count[:,use_sample].sum()
+        use_sample_variant_count = total_variant_count[use_sample]
         new_variant_count = cur_view[:, use_sample].sum()
         variant_mask = variant_mask | v_count[:, use_sample]
         upto_now = variant_mask.sum()
@@ -85,7 +87,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
             use_sample = np.argmax(cur_sample_count)
 
         # how many does this sample have overall?
-        use_sample_variant_count = v_count[:,use_sample].sum()
+        use_sample_variant_count = total_variant_count[use_sample]
         # number of new variants added
         new_variant_count = np.max(cur_sample_count)
         # don't want to use these variants anymore
