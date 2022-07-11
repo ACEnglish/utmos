@@ -47,8 +47,8 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
     num_vars = v_count.shape[0]
     variant_mask = np.zeros(num_vars, dtype='bool')
     # get rid of exclude up front
-    sample_mask = np.isin(vcf_samples, exclude)
-    logging.info(f"Excluding {sample_mask.sum()} samples")
+    logging.info(f"Excluding {len(exclude)} samples")
+    sample_mask = ~np.isin(vcf_samples, exclude)
 
     logging.info(f"Including {len(include)} samples")
     # calculate this once
@@ -70,7 +70,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         # of the variants remaining
         cur_view = v_count[~variant_mask]
         # how many variants per sample
-        cur_sample_count = np.ma.MaskedArray(cur_view.sum(axis=0), fill_value=-1, mask=sample_mask)
+        cur_sample_count = cur_view.sum(axis=0) * sample_mask
 
         # use the sample with the most variants
         # incorporate weights if needed
@@ -94,7 +94,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         # don't want to use these variants anymore
         variant_mask = variant_mask | v_count[:, use_sample]
         # or this sample
-        sample_mask[use_sample] = True
+        sample_mask[use_sample] = False
 
         # our running total number of variants
         upto_now += new_variant_count
