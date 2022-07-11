@@ -104,7 +104,7 @@ user	49m28.622s
 sys	1m24.693s
 ```
 
-On newer core-4.1-amd64:core-4.1-noarch hardware and running the docker through singularity:
+On newer hardware (Intel(R) Xeon(R) CPU E5-2670 v3 @ 2.30GHz) and running the docker through singularity:
 ```
 #Utmos:
 real	7m48.177s
