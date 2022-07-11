@@ -62,7 +62,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         use_sample_variant_count = total_variant_count[use_sample]
         new_variant_count = cur_sample_count[use_sample]
         variant_mask = variant_mask | v_count[:, use_sample]
-        upto_now += cur_sample_count
+        upto_now += new_variant_count
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
 
