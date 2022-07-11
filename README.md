@@ -85,7 +85,7 @@ Future features:
 * `--mode` : greedy (default), random, topN 
 
 ## Performace metrics
-Using chr22 from 1kgp genotype  
+Running on a 2013 Mac Pro and using chr22 from 1kgp genotype  
 `ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502//ALL.chr22.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz`
 
 2,504 samples x 1,103,547 variants
@@ -102,6 +102,14 @@ SVCollector runtime: (including 30 seconds to uncompress the VCF)
 real	61m34.008s
 user	49m28.622s
 sys	1m24.693s
+```
+
+On newer core-4.1-amd64:core-4.1-noarch hardware and running the docker through singularity:
+```
+#Utmos:
+real	7m48.177s
+user	6m53.104s
+sys	0m53.056s
 ```
 
 ## Dockerfile
