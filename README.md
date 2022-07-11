@@ -106,10 +106,15 @@ sys	1m24.693s
 
 On newer hardware (Intel(R) Xeon(R) CPU E5-2670 v3 @ 2.30GHz) and running the docker through singularity:
 ```
-#Utmos:
-real	7m48.177s
-user	6m53.104s
-sys	0m53.056s
+#Utmos
+real	6m30.870s
+user	5m53.305s
+sys	0m36.403s
+
+#SVCollector
+real	7m44.110s
+user	7m8.516s
+sys	0m17.368s
 ```
 
 ## Dockerfile
