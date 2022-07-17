@@ -49,11 +49,11 @@ Pulls information from `vcf[.gz]` into numpy arrays and saves using joblib.
 This step is optional, but makes it easier to convert multiple VCFs at once (with separate jobs).
 By default, the genotype array is shrunk even further using `numpy.packbits`. This can be turned off with `-p`.
 As a test, the genotype-only chr22 snps from the 1kgp (2,504 samples x 1,103,547 variants)
-<table><tr><th>File</th><th>Size (megabytes)</th>
-<tr><td>VCF</td><td>198</td></tr>
-<tr><td>--nopackbits</td><td>64</td></tr>
-<tr><td>--compress 5 (default)</td><td>29</td></tr>
-<tr><td>--compress 9</td><td>26</td></tr>
+<table><tr><th>File</th><th>Size (megabytes)</th><th>Fold Decrease</th>
+<tr><td>VCF</td><td>198</td><td>.</td></tr>
+<tr><td>--nopackbits</td><td>64</td><td>3.09</td></tr>
+<tr><td>--compress 5 (default)</td><td>29</td><td>6.82</td></tr>
+<tr><td>--compress 9</td><td>26</td><td>7.62</td></tr>
 </table>
 
 If `utmos select --af` is going to be run, you must use `utmos convert --af`
