@@ -9,6 +9,7 @@ import h5py
 import allel
 import joblib
 import truvari
+import numpy as np
 
 def parse_args(args):
     """
@@ -24,6 +25,8 @@ def parse_args(args):
                         help="Lower memory usage with hdf5 temporary files (%(default)s)")
     parser.add_argument("-c", "--compress", type=int, default=5,
                         help="joblib compress level 1-9 (%(default)s)")
+    parser.add_argument("-p", "--nopackbits", action="store_false",
+                        help="Use numpy.packbits to make output smaller (%(default)s)")
     parser.add_argument("--af", action="store_true",
                         help="Calcluate allele frequencies (%(default)s)")
 
@@ -31,7 +34,7 @@ def parse_args(args):
     truvari.setup_logging()
     return args
 
-def read_vcf(in_file, lowmem=False, allele_freq=False):
+def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False):
     """
     Read a vcf's genotypes and return numpy arrays
     """
@@ -56,6 +59,11 @@ def read_vcf(in_file, lowmem=False, allele_freq=False):
     logging.info(f"{num_homs} homs")
     v_count = is_het | is_hom
 
+    if packbits:
+        v_count = np.packbits(v_count, axis=1)
+        data['packedbits'] = True
+    else:
+        data['packedbits'] = False
     af = None
     if allele_freq:
         af = gts.count_alleles().to_frequencies()[:, 1]
@@ -78,7 +86,7 @@ def cvt_main(cmdargs):
     """
     args = parse_args(cmdargs)
     # fields = optionaly AF (make sure its consistent with Number=[./1 whatever]
-    data = read_vcf(args.in_file, args.lowmem, args.af)
+    data = read_vcf(args.in_file, args.lowmem, args.af, args.nopackbits)
     logging.info("Saving genotypes")
     joblib.dump(data, args.out_file, compress=args.compress)
     logging.info("Finished conversion")

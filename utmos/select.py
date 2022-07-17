@@ -165,7 +165,10 @@ def load_files(in_files, lowmem=False, af=False):
             logging.critical(f"Different samples in {i}")
             sys.exit(1)
 
-        gt_parts.append(p['GT'])
+        if 'packedbits' in p and p['packedbits']:
+            gt_parts.append(np.unpackbits(p['GT'], axis=1, count=len(p['samples'])))
+        else:
+            gt_parts.append(p['GT'])
         if af:
             af_parts.append(p['AF'])
 
