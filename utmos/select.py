@@ -166,9 +166,11 @@ def load_files(in_files, lowmem=False, af=False):
             sys.exit(1)
 
         if 'packedbits' in p and p['packedbits']:
-            gt_parts.append(np.unpackbits(p['GT'], axis=1, count=len(p['samples'])))
+            upack = np.unpackbits(p['GT'], axis=1, count=len(p['samples']))
+            gt_parts.append(upack.astype(bool))
         else:
             gt_parts.append(p['GT'])
+
         if af:
             af_parts.append(p['AF'])
 
