@@ -52,9 +52,13 @@ As a test, the genotype-only chr22 snps from the 1kgp (2,504 samples x 1,103,547
 <table><tr><th>File</th><th>Size (megabytes)</th><th>Fold Decrease</th>
 <tr><td>VCF</td><td>198</td><td>.</td></tr>
 <tr><td>--nopackbits</td><td>64</td><td>3.09</td></tr>
-<tr><td>--compress 5 (default)</td><td>29</td><td>6.82</td></tr>
+<tr><td>default params</td><td>29</td><td>6.82</td></tr>
 <tr><td>--compress 9</td><td>26</td><td>7.62</td></tr>
+<tr><td>both axis pack*</td><td>12</td><td>16.5</td></tr>
+<tr><td>both axis pack* -c 9 </td><td>11</td><td>18</td></tr>
 </table>
+
+\* both axis pack is not yet implemented since the overhead it requires slows runtime a little bit. I'll implement it if there's any demand
 
 If `utmos select --af` is going to be run, you must use `utmos convert --af`
 
@@ -85,8 +89,6 @@ score in the weight file. Any sample without a provided weight is given a 1.
 * `--include` and `--exclude` will force inclusion or exclusion of samples regardless of their score. These 
 parameters can take a comma-separated list of sample names (e.g. samp1,samp2) or can point to a file with one sample per-line. 
 * `in_files` are one or more input files and can be a mix of vcfs or jl files from `utmos convert`. 
-
-
 
 Future features:
 * `--mode` : greedy (default), random, topN 
