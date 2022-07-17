@@ -35,8 +35,10 @@ def parse_args(args):
                         help="Filename with or Comma-separated list of samples to force selection")
     parser.add_argument("--exclude", type=str, default=None,
                         help="Filename with or Comma-separated list of samples to exclude selection")
+    parser.add_argument("--debug", action="store_true",
+                        help="Verbose logging")
     args = parser.parse_args(args)
-    truvari.setup_logging()
+    truvari.setup_logging(args.debug)
     return args
 
 def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weights):
@@ -46,27 +48,30 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
     """
     num_vars = v_count.shape[0]
     variant_mask = np.zeros(num_vars, dtype='bool')
+    # calculate this once
+    total_variant_count = v_count.sum(axis=0)
+
     # get rid of exclude up front
     logging.info(f"Excluding {len(exclude)} samples")
     sample_mask = ~np.isin(vcf_samples, exclude)
 
-    logging.info(f"Including {len(include)} samples")
-    # calculate this once
-    total_variant_count = v_count.sum(axis=0)
-
     upto_now = 0
+
+    logging.info(f"Including {len(include)} samples")
     for inc in include:
         use_sample = np.where(vcf_samples == inc)[0][0]
         cur_view = v_count[~variant_mask]
-        cur_sample_count = cur_view.sum(axis=0)
+        cur_sample_count = cur_view.sum(axis=0) * sample_mask
         use_sample_variant_count = total_variant_count[use_sample]
         new_variant_count = cur_sample_count[use_sample]
         variant_mask = variant_mask | v_count[:, use_sample]
+        sample_mask[use_sample] = False
         upto_now += new_variant_count
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
 
-    for _ in range(max_reporting - len(include)): # picking the best N samples
+    
+    for _ in range(max_reporting - len(include)):
         # of the variants remaining
         cur_view = v_count[~variant_mask]
         # how many variants per sample
@@ -76,7 +81,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         # incorporate weights if needed
         cur_sample_weighted = None
         if af is not None:
-            cur_sample_weighted = (cur_view * af[~variant_mask]).sum(axis=0)
+            cur_sample_weighted = (cur_view * af[~variant_mask]).sum(axis=0) * sample_mask
         if weights is not None:
             if cur_sample_weighted is None:
                 cur_sample_weighted = cur_sample_count.copy()
@@ -84,13 +89,16 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
 
         if af is not None or weights is not None:
             use_sample = np.argmax(cur_sample_weighted)
+            logging.debug("%s has score %.3f", use_sample, cur_sample_weighted[use_sample])
         else:
             use_sample = np.argmax(cur_sample_count)
 
         # how many does this sample have overall?
         use_sample_variant_count = total_variant_count[use_sample]
+        logging.debug("%s has variant count %d", use_sample, use_sample_variant_count)
         # number of new variants added
         new_variant_count = cur_sample_count[use_sample]
+        logging.debug("%s has new variant count %d", use_sample, new_variant_count)
         # don't want to use these variants anymore
         variant_mask = variant_mask | v_count[:, use_sample]
         # or this sample
@@ -105,6 +113,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
 
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
+
 
 def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=False, weights=None):
     """
@@ -185,7 +194,7 @@ def load_files(in_files, lowmem=False, af=False):
         ret =  {'GT':gt_parts[0],
                 'samples':samples}
         if af:
-            ret['AF'] = af_parts
+            ret['AF'] = af_parts[0]
         
     return ret
 

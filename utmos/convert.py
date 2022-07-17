@@ -59,20 +59,21 @@ def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False):
     logging.info(f"{num_homs} homs")
     v_count = is_het | is_hom
 
-    if packbits:
-        v_count = np.packbits(v_count, axis=1)
-        data['packedbits'] = True
-    else:
-        data['packedbits'] = False
-    af = None
-    if allele_freq:
-        af = gts.count_alleles().to_frequencies()[:, 1]
-
     if lowmem:
         data = {"GT": v_count, "samples": data["samples"][:].astype(str)}
     else:
         del data["calldata/GT"]
         data["GT"] = v_count
+
+    if packbits:
+        data["GT"] = np.packbits(data["GT"], axis=1)
+        data['packedbits'] = True
+    else:
+        data['packedbits'] = False
+
+    af = None
+    if allele_freq:
+        af = gts.count_alleles().to_frequencies()[:, 1]
 
     if allele_freq:
         data["AF"] = af
