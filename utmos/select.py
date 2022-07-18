@@ -42,6 +42,12 @@ def greedy_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, w
         yield [inc, variant_count, new_variant_count,
                tot_captured, round(tot_captured / num_vars, 4)]
 
+    af_matrix = None
+    # Only calculate this once. Increases memory usage but makes selection MUCH faster
+    if af is not None:
+        logging.info("Calculating AF matrix")
+        af_matrix = gt_matrix * af
+
     for _ in range(max_reporting - len(include)):
         # of the variants remaining
         cur_view = gt_matrix[~variant_mask]
@@ -51,7 +57,7 @@ def greedy_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, w
         # scoring
         sample_scores = cur_sample_count
         if af is not None:
-            sample_scores = (cur_view * af[~variant_mask]).sum(axis=0) * sample_mask
+            sample_scores = af_matrix[~variant_mask].sum(axis=0) * sample_mask
         elif weights is not None:
             # Need to let weights work on a copy of counts so values aren't destroyed
             sample_scores = cur_sample_count.copy()
