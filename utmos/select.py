@@ -62,10 +62,10 @@ def greedy_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, w
     for inc in include:
         use_sample = np.where(vcf_samples == inc)[0][0]
         variant_count = total_variant_count[use_sample]
-        new_variant_count = gt_matrix[~variant_mask].sum(axis=0)[use_sample]
+        new_variant_count = gt_matrix[~variant_mask, use_sample].sum(axis=0)
         variant_mask = variant_mask | gt_matrix[:, use_sample]
         sample_mask[use_sample] = False
-        tot_captured  += new_variant_count
+        tot_captured += new_variant_count
         yield [vcf_samples[use_sample], variant_count, new_variant_count,
                tot_captured, round(tot_captured / num_vars, 4)]
 
@@ -75,18 +75,15 @@ def greedy_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, w
         # how many variants per sample
         cur_sample_count = cur_view.sum(axis=0) * sample_mask
 
-        # scoring manipulations
-        sample_scores = None
-        if af is None and weights is None:
-            sample_scores = cur_sample_count
-        else:
-            if af is not None:
-                sample_scores = (cur_view * af[~variant_mask]).sum(axis=0) * sample_mask
-            else:
-                # Need to work on a copy so the values aren't destroyed
-                sample_scores = cur_sample_count.copy()
-            if weights is not None:
-                sample_scores = sample_scores * weights
+        # scoring
+        sample_scores = cur_sample_count
+        if af is not None:
+            sample_scores = (cur_view * af[~variant_mask]).sum(axis=0) * sample_mask
+        elif weights is not None:
+            # Need to let weights work on a copy of counts so values aren't destroyed
+            sample_scores = cur_sample_count.copy()
+        if weights is not None:
+            sample_scores = sample_scores * weights
 
         # use highest score
         use_sample = np.argmax(sample_scores)
