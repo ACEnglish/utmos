@@ -118,7 +118,7 @@ run test_select_weights $ut select -c 20 --weights $INDIR/weights.txt $INDIR/chu
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_weights.txt) $(fn_md5 $ANSDIR/select_weights.txt)
 
-run test_select_af $ut select -c 20 --af -o $OD/select_af.txt $INDIR/chunk0.af.jl $INDIR/chunk1.af.j
+run test_select_af $ut select -c 20 --af -o $OD/select_af.txt $INDIR/chunk0.af.jl $INDIR/chunk1.af.jl
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_af.txt) $(fn_md5 $ANSDIR/select_af.txt)
 
@@ -147,6 +147,26 @@ assert_equal $(fn_md5 $OD/select_one_af.txt) $(fn_md5 $ANSDIR/select_one_af.txt)
 
 run test_select_badsamps $ut select $INDIR/chunk_tiny.vcf $INDIR/chunk0.af.jl
 assert_exit_code 1
+
+run test_bad_filetype $ut select doesntexist.txt 
+assert_exit_code 1
+
+run test_select_include_topN $ut select --mode topN -c 5 --include HG00096 $INDIR/chunk*.af.jl -o $OD/select_include_topN.txt
+assert_exit_code 0
+assert_equal $(fn_md5 $OD/select_include_topN.txt) $(fn_md5 $ANSDIR/select_include_topN.txt)
+
+run test_select_weights_topN $ut select --mode topN -c 5 --weights $INDIR/weights.txt $INDIR/chunk0.af.jl -o $OD/select_weights_topN.txt
+assert_exit_code 0
+assert_equal $(fn_md5 $OD/select_weights_topN.txt) $(fn_md5 $ANSDIR/select_weights_topN.txt)
+
+run test_select_af_topN $ut select --mode topN -c 5 --af  $INDIR/chunk0.af.jl -o $OD/select_af_topN.txt
+assert_exit_code 0
+assert_equal $(fn_md5 $OD/select_af_topN.txt) $(fn_md5 $ANSDIR/select_af_topN.txt)
+
+run test_select_random $ut select --mode random -c 5 -o $OD/select_random.txt $INDIR/chunk0.af.jl
+assert_exit_code 0
+
+
 
 # ------------------------------------------------------------
 #                                 coverage.py

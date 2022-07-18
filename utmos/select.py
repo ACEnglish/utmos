@@ -170,6 +170,7 @@ def run_selection(data, out_fn, max_reporting=0.02, include=None, exclude=None, 
         m_iter = mode(gt_matrix, vcf_samples, max_reporting, include,
                       exclude, af_data, sample_weights)
         for result in m_iter:
+            logging.info("Selected %s (%s)", result[0], result[4])
             out.write("\t".join([str(_) for _ in result]) + '\n')
 
 def samp_same(a, b):
@@ -192,6 +193,9 @@ def load_files(in_files, lowmem=False, load_af=False):
             dat = read_vcf(i, lowmem, load_af)
         elif i.endswith(".jl"):
             dat = joblib.load(i)
+        else:
+            logging.error("Unknown filetype %s. Expected `.vcf[.gz]` or `.jl`", i)
+            sys.exit(1)
 
         if samples is None:
             samples = dat['samples']

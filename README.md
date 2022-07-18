@@ -73,13 +73,16 @@ bcftools view -i "AF >= 0.01" input.vcf.gz | utmos convert /dev/stdin output.jl
 
 ## utmos select
 
-Select samples for validation and resequencing. Uses a greedy approach where it chooses the sample with the most
-unseen variants after each iteration. 
+Select samples for validation and resequencing.
+Works by iteratively selecting samples based on a score and reporting how many variants the sample contains as well as
+how many unseen variants contributed by the sample. Scores by default are variant counts which can then be weighted with
+a `--weights` and/or `--af`
 
 ```
-utmos select [-h] [--lowmem] [-o OUT] [-c COUNT] [--af] [--weights WEIGHTS]
-             [--include INCLUDE] [--exclude EXCLUDE]
-             in_files [in_files ...]
+select [-h] [--lowmem] [-o OUT] [-m {greedy,topN,random}] [-c COUNT]
+              [--af] [--weights WEIGHTS] [--include INCLUDE]
+              [--exclude EXCLUDE] [--debug]
+              in_files [in_files ...]
 ```
 
 * `--count` sets how many samples are selected. Can be a count or a percent of samples if < 1 
@@ -89,9 +92,11 @@ score in the weight file. Any sample without a provided weight is given a 1.
 * `--include` and `--exclude` will force inclusion or exclusion of samples regardless of their score. These 
 parameters can take a comma-separated list of sample names (e.g. samp1,samp2) or can point to a file with one sample per-line. 
 * `in_files` are one or more input files and can be a mix of vcfs or jl files from `utmos convert`. 
+* `--mode` :
+  * greedy (default): On each iteration, pick the sample with highest score and remove its variants from future iterations
+  * topN: Sort samples by score, return the highest scoring variants
+  * random: Pick random samples
 
-Future features:
-* `--mode` : greedy (default), random, topN 
 
 ## Performace metrics
 Running on a 2013 Mac Pro and using chr22 from 1kgp genotype  
