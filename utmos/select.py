@@ -70,7 +70,7 @@ def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weigh
         yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
                upto_now, round(upto_now / num_vars, 4)]
 
-    
+
     for _ in range(max_reporting - len(include)):
         # of the variants remaining
         cur_view = v_count[~variant_mask]
@@ -195,7 +195,7 @@ def load_files(in_files, lowmem=False, af=False):
                 'samples':samples}
         if af:
             ret['AF'] = af_parts[0]
-        
+
     return ret
 
 def parse_sample_lists(argument):
