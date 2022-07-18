@@ -30,7 +30,7 @@ jobs:
           python setup.py install
       - name: Running ssshtest
         run: |
-          bash repo_utils/truvari_ssshtests.sh
+          bash repo_utils/utmos_ssshtests.sh
       - name: Running pylint
         run: |
           python repo_utils/pylint_maker.py
