@@ -13,33 +13,6 @@ import pandas as pd
 
 from utmos.convert import read_vcf
 
-def parse_args(args):
-    """
-    Pull the command line parameters
-    """
-    parser = argparse.ArgumentParser(prog="select", description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("in_files", nargs="+", type=str,
-                        help="Input VCF or jl files")
-    parser.add_argument("--lowmem", action="store_true",
-                        help="Use temporary files to lower memory usage during vcf conversion (%(default)s)")
-    parser.add_argument("-o", "--out", type=str, default="/dev/stdout",
-                        help="Output file (stdout)")
-    parser.add_argument("-c", "--count", type=float, default=0.02,
-                        help="Number of samples to select as a percent if <1 or count if >=1 (%(default)s)")
-    parser.add_argument("--af", action="store_true",
-                        help="Weigh variants by allele frequency")
-    parser.add_argument("--weights", type=str, default=None,
-                        help="Tab-delimited file of sample weights")
-    parser.add_argument("--include", type=str, default=None,
-                        help="Filename with or Comma-separated list of samples to force selection")
-    parser.add_argument("--exclude", type=str, default=None,
-                        help="Filename with or Comma-separated list of samples to exclude selection")
-    parser.add_argument("--debug", action="store_true",
-                        help="Verbose logging")
-    args = parser.parse_args(args)
-    truvari.setup_logging(args.debug)
-    return args
 
 def greedy_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, weights):
     """
@@ -66,7 +39,7 @@ def greedy_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, w
         variant_mask = variant_mask | gt_matrix[:, use_sample]
         sample_mask[use_sample] = False
         tot_captured += new_variant_count
-        yield [vcf_samples[use_sample], variant_count, new_variant_count,
+        yield [inc, variant_count, new_variant_count,
                tot_captured, round(tot_captured / num_vars, 4)]
 
     for _ in range(max_reporting - len(include)):
@@ -105,7 +78,69 @@ def greedy_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, w
         yield [vcf_samples[use_sample], variant_count, new_variant_count,
                tot_captured, round(tot_captured / num_vars, 4)]
 
-def run_selection(data, out_fn, max_reporting=0.02, include=None, exclude=None, weights=None):
+def topN_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, weights, is_random=False):
+    """
+    Select the topN samples
+    I reuse this method to do random selection as well
+    """
+    num_vars = gt_matrix.shape[0]
+    # True where we've used the variant
+    variant_mask = np.zeros(num_vars, dtype='bool')
+
+    sample_frame = pd.DataFrame(pd.Series(gt_matrix.sum(axis=0)), columns=['count'])
+    sample_frame["sample"] = vcf_samples
+
+    # scoring
+    sort_key = 'count'
+    if af is not None:
+        sample_frame['score'] = (gt_matrix * af).sum(axis=0)
+        sort_key = 'score'
+    elif weights is not None:
+        # Need to let weights work on a copy of counts so values aren't destroyed
+        sample_frame['score'] = sample_frame["count"]
+    if weights is not None:
+        sort_key = 'score'
+        sample_frame['score'] = sample_frame['score'] * weights
+
+    logging.info(f"Excluding {len(exclude)} samples")
+    logging.info(f"Including {len(include)} samples")
+
+    tot_captured = 0
+    for inc in include:
+        exclude.append(inc)
+        view = sample_frame[sample_frame['sample'] == inc].iloc[0]
+        new_variant_count = gt_matrix[~variant_mask, view.name].sum(axis=0)
+        tot_captured += new_variant_count
+        variant_mask = variant_mask | gt_matrix[:, view.name]
+        yield [inc, view['count'], new_variant_count,
+               tot_captured, round(tot_captured / num_vars, 4)]
+
+    max_reporting -= len(include)
+    sample_frame.sort_values(sort_key, ascending=False, inplace=True)
+    sample_mask = sample_frame[~sample_frame["sample"].isin(exclude)].index
+    if is_random:
+        m_iter = sample_frame.loc[sample_mask].sample(max_reporting)
+    else:
+        m_iter = sample_frame.loc[sample_mask][:max_reporting]
+
+    for idx, d in m_iter.iterrows():
+        new_variant_count = gt_matrix[~variant_mask, idx].sum()
+        tot_captured += new_variant_count
+        variant_mask = variant_mask | gt_matrix[:, idx]
+        yield [d["sample"], d["count"], new_variant_count,
+               tot_captured, round(tot_captured / num_vars, 4)]
+
+def random_select(*args, **kwargs):
+    """
+    Call topN select in random mode
+    """
+    return topN_select(*args, **kwargs, is_random=True)
+
+SELECTORS = {"greedy": greedy_select,
+             "topN": topN_select,
+             "random": random_select}
+
+def run_selection(data, out_fn, max_reporting=0.02, include=None, exclude=None, weights=None, mode='greedy'):
     """
     Setup the selection calculation
     if max_reporting [0,1], select that percent of samples
@@ -118,8 +153,7 @@ def run_selection(data, out_fn, max_reporting=0.02, include=None, exclude=None, 
     num_samples = gt_matrix.shape[1]
     num_vars = gt_matrix.shape[0]
 
-    max_reporting = int(num_samples * max_reporting) if max_reporting < 1 else int(max_reporting)
-
+    max_reporting = max(1, int(num_samples * max_reporting) if max_reporting < 1 else int(max_reporting))
     logging.info(f"Sample Count {num_samples}")
     logging.info(f"Variant Count {num_vars}")
 
@@ -130,10 +164,11 @@ def run_selection(data, out_fn, max_reporting=0.02, include=None, exclude=None, 
             if i in weights.index:
                 sample_weights[pos] = weights.loc[i]
 
+    mode = SELECTORS[mode]
     with open(out_fn, 'w') as out:
         out.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
-        m_iter = greedy_select(gt_matrix, vcf_samples, max_reporting, include,
-                               exclude, af_data, sample_weights)
+        m_iter = mode(gt_matrix, vcf_samples, max_reporting, include,
+                      exclude, af_data, sample_weights)
         for result in m_iter:
             out.write("\t".join([str(_) for _ in result]) + '\n')
 
@@ -207,6 +242,37 @@ def parse_weights(argument):
     data.set_index('sample', inplace=True)
     return data
 
+def parse_args(args):
+    """
+    Pull the command line parameters
+    """
+    parser = argparse.ArgumentParser(prog="select", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("in_files", nargs="+", type=str,
+                        help="Input VCF or jl files")
+    parser.add_argument("--lowmem", action="store_true",
+                        help="Use temporary files to lower memory usage during vcf conversion (%(default)s)")
+    parser.add_argument("-o", "--out", type=str, default="/dev/stdout",
+                        help="Output file (stdout)")
+    parser.add_argument("-m", "--mode", type=str, default='greedy', choices=SELECTORS.keys(),
+                        help="Selection algo to use greedy (default), topN, or random")
+    parser.add_argument("-c", "--count", type=float, default=0.02,
+                        help="Number of samples to select as a percent if <1 or count if >=1 (%(default)s)")
+    parser.add_argument("--af", action="store_true",
+                        help="Weigh variants by allele frequency")
+    parser.add_argument("--weights", type=str, default=None,
+                        help="Tab-delimited file of sample weights")
+    parser.add_argument("--include", type=str, default=None,
+                        help="Filename with or Comma-separated list of samples to force selection")
+    parser.add_argument("--exclude", type=str, default=None,
+                        help="Filename with or Comma-separated list of samples to exclude selection")
+    parser.add_argument("--debug", action="store_true",
+                        help="Verbose logging")
+    args = parser.parse_args(args)
+    truvari.setup_logging(args.debug)
+    return args
+
+
 def select_main(cmdargs):
     """
     Main
@@ -220,6 +286,6 @@ def select_main(cmdargs):
 
     run_selection(data, args.out, args.count,
                   args.include, args.exclude,
-                  args.weights)
+                  args.weights, args.mode)
 
     logging.info("Finished")
