@@ -41,95 +41,85 @@ def parse_args(args):
     truvari.setup_logging(args.debug)
     return args
 
-def greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af, weights):
+def greedy_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, weights):
     """
     Greedy calculation
     yields list of samples
     """
-    num_vars = v_count.shape[0]
+    num_vars = gt_matrix.shape[0]
+    # True where we've used the variant
     variant_mask = np.zeros(num_vars, dtype='bool')
-    # calculate this once
-    total_variant_count = v_count.sum(axis=0)
+    total_variant_count = gt_matrix.sum(axis=0)
 
     # get rid of exclude up front
     logging.info(f"Excluding {len(exclude)} samples")
+    # False where we've used the sample
     sample_mask = ~np.isin(vcf_samples, exclude)
 
-    upto_now = 0
+    tot_captured = 0
 
     logging.info(f"Including {len(include)} samples")
     for inc in include:
         use_sample = np.where(vcf_samples == inc)[0][0]
-        cur_view = v_count[~variant_mask]
-        cur_sample_count = cur_view.sum(axis=0) * sample_mask
-        use_sample_variant_count = total_variant_count[use_sample]
-        new_variant_count = cur_sample_count[use_sample]
-        variant_mask = variant_mask | v_count[:, use_sample]
+        variant_count = total_variant_count[use_sample]
+        new_variant_count = gt_matrix[~variant_mask].sum(axis=0)[use_sample]
+        variant_mask = variant_mask | gt_matrix[:, use_sample]
         sample_mask[use_sample] = False
-        upto_now += new_variant_count
-        yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
-               upto_now, round(upto_now / num_vars, 4)]
-
+        tot_captured  += new_variant_count
+        yield [vcf_samples[use_sample], variant_count, new_variant_count,
+               tot_captured, round(tot_captured / num_vars, 4)]
 
     for _ in range(max_reporting - len(include)):
         # of the variants remaining
-        cur_view = v_count[~variant_mask]
+        cur_view = gt_matrix[~variant_mask]
         # how many variants per sample
         cur_sample_count = cur_view.sum(axis=0) * sample_mask
 
-        # use the sample with the most variants
-        # incorporate weights if needed
-        cur_sample_weighted = None
-        if af is not None:
-            cur_sample_weighted = (cur_view * af[~variant_mask]).sum(axis=0) * sample_mask
-        if weights is not None:
-            if cur_sample_weighted is None:
-                cur_sample_weighted = cur_sample_count.copy()
-            cur_sample_weighted = cur_sample_weighted * weights
-
-        if af is not None or weights is not None:
-            use_sample = np.argmax(cur_sample_weighted)
-            logging.debug("%s has score %.3f", use_sample, cur_sample_weighted[use_sample])
+        # scoring manipulations
+        sample_scores = None
+        if af is None and weights is None:
+            sample_scores = cur_sample_count
         else:
-            use_sample = np.argmax(cur_sample_count)
+            if af is not None:
+                sample_scores = (cur_view * af[~variant_mask]).sum(axis=0) * sample_mask
+            else:
+                # Need to work on a copy so the values aren't destroyed
+                sample_scores = cur_sample_count.copy()
+            if weights is not None:
+                sample_scores = sample_scores * weights
 
+        # use highest score
+        use_sample = np.argmax(sample_scores)
         # how many does this sample have overall?
-        use_sample_variant_count = total_variant_count[use_sample]
-        logging.debug("%s has variant count %d", use_sample, use_sample_variant_count)
+        variant_count = total_variant_count[use_sample]
         # number of new variants added
         new_variant_count = cur_sample_count[use_sample]
-        logging.debug("%s has new variant count %d", use_sample, new_variant_count)
         # don't want to use these variants anymore
-        variant_mask = variant_mask | v_count[:, use_sample]
+        variant_mask = variant_mask | gt_matrix[:, use_sample]
         # or this sample
         sample_mask[use_sample] = False
-
-        # our running total number of variants
-        upto_now += new_variant_count
+        # update running total number of variants
+        tot_captured += new_variant_count
         # stop running if we're out of new variants
         if new_variant_count == 0:
             logging.warning("Ran out of new variants")
             break
 
-        yield [vcf_samples[use_sample], use_sample_variant_count, new_variant_count,
-               upto_now, round(upto_now / num_vars, 4)]
+        yield [vcf_samples[use_sample], variant_count, new_variant_count,
+               tot_captured, round(tot_captured / num_vars, 4)]
 
-
-def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=False, weights=None):
+def run_selection(data, out_fn, max_reporting=0.02, include=None, exclude=None, weights=None):
     """
-    Do the selection calculation
+    Setup the selection calculation
     if max_reporting [0,1], select that percent of samples
     if max_reporting >= 1, select that number of samples
     """
-    v_count = data['GT']
+    gt_matrix = data['GT']
     vcf_samples = data['samples']
-    af_data = None
-    if af:
-        af_data = data["AF"]
-        af_data = af_data.reshape(af_data.shape[0], 1)
+    af_data = data["AF"]
 
-    num_samples = v_count.shape[1]
-    num_vars = v_count.shape[0]
+    num_samples = gt_matrix.shape[1]
+    num_vars = gt_matrix.shape[0]
 
     max_reporting = int(num_samples * max_reporting) if max_reporting < 1 else int(max_reporting)
 
@@ -138,14 +128,16 @@ def calculate(data, out_fn, max_reporting=0.02, include=None, exclude=None, af=F
 
     sample_weights = None
     if weights is not None:
-        sample_weights = np.zeros(num_samples) + 1
+        sample_weights = np.ones(num_samples)
         for pos, i in enumerate(vcf_samples):
             if i in weights.index:
                 sample_weights[pos] = weights.loc[i]
 
     with open(out_fn, 'w') as out:
         out.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
-        for result in greedy_calc(v_count, vcf_samples, max_reporting, include, exclude, af_data, sample_weights):
+        m_iter = greedy_select(gt_matrix, vcf_samples, max_reporting, include,
+                               exclude, af_data, sample_weights)
+        for result in m_iter:
             out.write("\t".join([str(_) for _ in result]) + '\n')
 
 def samp_same(a, b):
@@ -155,7 +147,7 @@ def samp_same(a, b):
     """
     return len(a) == len(b) and np.equal(a, b).all()
 
-def load_files(in_files, lowmem=False, af=False):
+def load_files(in_files, lowmem=False, load_af=False):
     """
     Load and concatenate multiple files
     """
@@ -165,38 +157,33 @@ def load_files(in_files, lowmem=False, af=False):
     af_parts = []
     for i in in_files:
         if i.endswith((".vcf.gz", ".vcf")):
-            p = read_vcf(i, lowmem, af)
+            dat = read_vcf(i, lowmem, load_af)
         elif i.endswith(".jl"):
-            p = joblib.load(i)
+            dat = joblib.load(i)
+
         if samples is None:
-            samples = p['samples']
-        elif not samp_same(samples, p['samples']):
+            samples = dat['samples']
+        elif not samp_same(samples, dat['samples']):
             logging.critical(f"Different samples in {i}")
             sys.exit(1)
 
-        if 'packedbits' in p and p['packedbits']:
-            upack = np.unpackbits(p['GT'], axis=1, count=len(p['samples']))
+        if dat['packedbits']:
+            upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples']))
             gt_parts.append(upack.astype(bool))
         else:
-            gt_parts.append(p['GT'])
+            gt_parts.append(dat['GT'])
 
-        if af:
-            af_parts.append(p['AF'])
+        af_parts.append(dat['AF'])
 
-    ret = None
     if len(gt_parts) > 1:
         logging.info("Concatenating")
-        ret =  {'GT':np.concatenate(gt_parts),
-                'samples':samples}
-        if af:
-            ret['AF'] = np.concatenate(af_parts)
-    else:
-        ret =  {'GT':gt_parts[0],
-                'samples':samples}
-        if af:
-            ret['AF'] = af_parts[0]
+        return  {'GT':np.concatenate(gt_parts),
+                 'samples':samples,
+                 'AF': np.concatenate(af_parts) if load_af else None}
 
-    return ret
+    return  {'GT':gt_parts[0],
+             'samples':samples,
+             'AF': af_parts[0] if load_af else None}
 
 def parse_sample_lists(argument):
     """
@@ -234,8 +221,8 @@ def select_main(cmdargs):
     args.exclude = parse_sample_lists(args.exclude)
     args.weights = parse_weights(args.weights)
 
-    calculate(data, args.out, args.count,
-              args.include, args.exclude,
-              args.af, args.weights)
+    run_selection(data, args.out, args.count,
+                  args.include, args.exclude,
+                  args.weights)
 
     logging.info("Finished")

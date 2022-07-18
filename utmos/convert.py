@@ -63,6 +63,8 @@ def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False):
     if allele_freq:
         logging.info("Calculating AFs")
         af = gts.count_alleles().to_frequencies()[:, 1]
+        # Needs to be reshaped for future multiplications
+        af = af.reshape(af.shape[0], 1)
 
     if lowmem:
         data = {"GT": v_count, "samples": data["samples"][:].astype(str)}
@@ -76,9 +78,6 @@ def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False):
         data['packedbits'] = True
     else:
         data['packedbits'] = False
-
-    if allele_freq:
-        data["AF"] = af
 
     data["stats"] = {'num_het': num_hets, 'num_hom': num_homs}
     return data
