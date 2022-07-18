@@ -12,9 +12,9 @@ data = json.load(open(sys.argv[1], 'r'))
 coverage_pct = round(data['totals']['percent_covered'])
 
 # Define thresholds: <2=red, <4=orange <8=yellow <10=green
-thresholds = {20: 'red',
-              40: 'orange',
-              70: 'yellow',
+thresholds = {50: 'red',
+              70: 'orange',
+              80: 'yellow',
               90: 'green'}
 
 badge = anybadge.Badge('coverage', coverage_pct,

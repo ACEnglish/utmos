@@ -157,4 +157,5 @@ coverage combine
 coverage report --include=utmos/*
 coverage html --include=utmos/* -d $OD/htmlcov/
 coverage json --include=utmos/* -o $OD/coverage.json
-python3 repo_utils/coverage_maker.py $OD/coverage.json
+run test_coverage python3 repo_utils/coverage_maker.py $OD/coverage.json
+assert_exit_code 0
