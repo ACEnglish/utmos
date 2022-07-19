@@ -166,7 +166,17 @@ assert_equal $(fn_md5 $OD/select_af_topN.txt) $(fn_md5 $ANSDIR/select_af_topN.tx
 run test_select_random $ut select --mode random -c 5 -o $OD/select_random.txt $INDIR/chunk0.af.jl
 assert_exit_code 0
 
+run test_select_include_subset $ut select --subset $INDIR/subset.txt -c 5 --include HG00096 $INDIR/chunk*.af.jl -o $OD/select_include_subset.txt
+assert_exit_code 0
+assert_equal $(fn_md5 $OD/select_include_subset.txt) $(fn_md5 $ANSDIR/select_include_subset.txt)
 
+run test_select_weights_subset $ut select --subset $INDIR/subset.txt -c 5 --weights $INDIR/weights.txt $INDIR/chunk0.af.jl -o $OD/select_weights_subset.txt
+assert_exit_code 0
+assert_equal $(fn_md5 $OD/select_weights_subset.txt) $(fn_md5 $ANSDIR/select_weights_subset.txt)
+
+run test_select_af_subset $ut select --subset $INDIR/subset.txt -c 5 --af  $INDIR/chunk0.af.jl -o $OD/select_af_subset.txt
+assert_exit_code 0
+assert_equal $(fn_md5 $OD/select_af_subset.txt) $(fn_md5 $ANSDIR/select_af_subset.txt)
 
 # ------------------------------------------------------------
 #                                 coverage.py

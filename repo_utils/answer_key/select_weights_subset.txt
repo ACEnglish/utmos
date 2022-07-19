@@ -1,0 +1,6 @@
+sample	var_count	new_count	tot_captured	pct_captured
+HG00280	41	41	41	0.041
+HG00132	55	27	68	0.068
+HG00140	46	10	78	0.078
+HG00117	40	8	86	0.086
+HG00105	34	5	91	0.091

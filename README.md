@@ -79,10 +79,10 @@ how many unseen variants contributed by the sample. Scores by default are varian
 a `--weights` and/or `--af`
 
 ```
-select [-h] [--lowmem] [-o OUT] [-m {greedy,topN,random}] [-c COUNT]
-              [--af] [--weights WEIGHTS] [--include INCLUDE]
-              [--exclude EXCLUDE] [--debug]
-              in_files [in_files ...]
+select [-h] [--lowmem] [-o OUT] [-m {greedy,topN,random}] [-c COUNT] [--af]
+              [--weights WEIGHTS] [--subset SUBSET] [--include INCLUDE]
+	      [--exclude EXCLUDE] [--debug]
+	      in_files [in_files ...]
 ```
 
 * `--count` sets how many samples are selected. Can be a count or a percent of samples if < 1 
@@ -91,6 +91,7 @@ select [-h] [--lowmem] [-o OUT] [-m {greedy,topN,random}] [-c COUNT]
 score in the weight file. Any sample without a provided weight is given a 1. 
 * `--include` and `--exclude` will force inclusion or exclusion of samples regardless of their score. These 
 parameters can take a comma-separated list of sample names (e.g. samp1,samp2) or can point to a file with one sample per-line. 
+* `--subset` will subset to only the specified samples before beginning any processing.
 * `in_files` are one or more input files and can be a mix of vcfs or jl files from `utmos convert`. 
 * `--mode` :
   * greedy (default): On each iteration, pick the sample with highest score and remove its variants from future iterations

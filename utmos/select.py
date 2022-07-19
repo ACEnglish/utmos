@@ -146,7 +146,7 @@ SELECTORS = {"greedy": greedy_select,
              "topN": topN_select,
              "random": random_select}
 
-def run_selection(data, out_fn, max_reporting=0.02, include=None, exclude=None, weights=None, mode='greedy'):
+def run_selection(data, out_fn, max_reporting=0.02, subset=None, include=None, exclude=None, weights=None, mode='greedy'):
     """
     Setup the selection calculation
     if max_reporting [0,1], select that percent of samples
@@ -155,9 +155,15 @@ def run_selection(data, out_fn, max_reporting=0.02, include=None, exclude=None, 
     gt_matrix = data['GT']
     vcf_samples = data['samples']
     af_data = data["AF"]
-
     num_samples = gt_matrix.shape[1]
     num_vars = gt_matrix.shape[0]
+
+    if subset:
+        keep = np.isin(vcf_samples, subset)
+        logging.info("Subsetting to %d of %d samples", keep.sum(), num_samples)
+        num_samples = keep.sum()
+        gt_matrix = gt_matrix[:, keep]
+        vcf_samples = vcf_samples[keep]
 
     max_reporting = max(1, int(num_samples * max_reporting) if max_reporting < 1 else int(max_reporting))
     logging.info(f"Sample Count {num_samples}")
@@ -272,6 +278,8 @@ def parse_args(args):
                         help="Weigh variants by allele frequency")
     parser.add_argument("--weights", type=str, default=None,
                         help="Tab-delimited file of sample weights")
+    parser.add_argument("--subset", type=str, default=None,
+                        help="Filename with or Comma-separated list of sample subset to analyze")
     parser.add_argument("--include", type=str, default=None,
                         help="Filename with or Comma-separated list of samples to force selection")
     parser.add_argument("--exclude", type=str, default=None,
@@ -290,11 +298,12 @@ def select_main(cmdargs):
     args = parse_args(cmdargs)
 
     data = load_files(args.in_files, args.lowmem, args.af)
+    args.subset = parse_sample_lists(args.subset)
     args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)
     args.weights = parse_weights(args.weights)
 
-    run_selection(data, args.out, args.count,
+    run_selection(data, args.out, args.count, args.subset,
                   args.include, args.exclude,
                   args.weights, args.mode)
 
