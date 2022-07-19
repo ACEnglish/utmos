@@ -16,7 +16,7 @@ Download a [release](https://github.com/ACEnglish/utmos/releases) and run
 python3 -m pip install Utmos-<version>.tar.gz
 ```
 
-Alternative, build from the repository, 
+Alternatively, build from the repository, 
 ```bash
 git clone https://github.com/ACEnglish/utmos.git
 cd utmos/
@@ -26,7 +26,7 @@ python3 -m pip install .
 ## Quick Start
 
 ```bash
-utmos select input1.vcf
+utmos select input1.vcf > sample_report.txt
 ```
 
 See `--help` of commands for more details.
