@@ -23,6 +23,8 @@ def parse_args(args):
                         help="Output joblib")
     parser.add_argument("--lowmem", action="store_true",
                         help="Lower memory usage with hdf5 temporary files (%(default)s)")
+    parser.add_argument("-C", "--chunk_length", type=int, default=2^14,
+                        help="Length (number of variants) of chunks in which data are processed. (%(default)s)")
     parser.add_argument("-c", "--compress", type=int, default=5,
                         help="joblib compress level 1-9 (%(default)s)")
     parser.add_argument("-p", "--nopackbits", action="store_false",
@@ -34,17 +36,17 @@ def parse_args(args):
     truvari.setup_logging()
     return args
 
-def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False):
+def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False, chunk_length=2^14):
     """
     Read a vcf's genotypes and return numpy arrays
     """
     logging.info("Reading VCF")
     if lowmem:
         tmpfile = tempfile.mkstemp()[1]
-        allel.vcf_to_hdf5(in_file, tmpfile, fields=["calldata/GT", "samples"])
+        allel.vcf_to_hdf5(in_file, tmpfile, fields=["calldata/GT", "samples"], chunk_length=chunk_length)
         data = h5py.File(tmpfile)
     else:
-        data = allel.read_vcf(in_file, fields=["calldata/GT", "samples"])
+        data = allel.read_vcf(in_file, fields=["calldata/GT", "samples"], chunk_length=chunk_length)
 
     logging.info(f"Converting genotypes to bool {data['calldata/GT'].shape}")
 
@@ -88,7 +90,7 @@ def cvt_main(cmdargs):
     """
     args = parse_args(cmdargs)
     # fields = optionaly AF (make sure its consistent with Number=[./1 whatever]
-    data = read_vcf(args.in_file, args.lowmem, args.af, args.nopackbits)
+    data = read_vcf(args.in_file, args.lowmem, args.af, args.nopackbits, args.chunk_length)
     logging.info("Saving genotypes")
     joblib.dump(data, args.out_file, compress=args.compress)
     logging.info("Finished conversion")
