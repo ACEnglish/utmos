@@ -197,10 +197,12 @@ def load_files(in_files, lowmem=False, load_af=False):
     """
     Load and concatenate multiple files
     """
-    logging.info(f"Loading {len(in_files)} files")
+    file_cnt = len(in_files)
+    logging.info(f"Loading {file_cnt} files")
     samples = None
     gt_parts = []
     af_parts = []
+    load_count = 0
     for i in in_files:
         if i.endswith((".vcf.gz", ".vcf")):
             dat = read_vcf(i, lowmem, load_af)
@@ -223,6 +225,8 @@ def load_files(in_files, lowmem=False, load_af=False):
             gt_parts.append(dat['GT'])
 
         af_parts.append(dat['AF'])
+        load_count += 1
+        logging.debug("Loaded %d of %d (%.2f)", load_count, file_cnt, load_count / file_cnt * 100)
 
     if len(gt_parts) > 1:
         logging.info("Concatenating")
