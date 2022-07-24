@@ -222,7 +222,7 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
         hf["AF"][-cur_part["AF"].shape[0]:] = cur_part["AF"]
 
 
-def load_files(in_files, lowmem=False, load_af=False, into_hdf5=None):
+def load_files(in_files, lowmem=False, into_hdf5=None):
     """
     Load and concatenate multiple files
     set the into_hdf5 into a filename to write the parts into an hdf5 file as the concatenation goes on.
@@ -238,7 +238,7 @@ def load_files(in_files, lowmem=False, load_af=False, into_hdf5=None):
     is_first = True
     for i in in_files:
         if i.endswith((".vcf.gz", ".vcf")):
-            dat = read_vcf(i, lowmem, load_af)
+            dat = read_vcf(i, lowmem)
         elif i.endswith(".jl"):
             dat = joblib.load(i)
         elif i.endswith(".hdf5"):
@@ -247,7 +247,6 @@ def load_files(in_files, lowmem=False, load_af=False, into_hdf5=None):
                 dat['GT'] = hf['GT'][:]
                 dat['AF'] = hf['AF'][:]
                 dat['samples'] = hf['samples'][:].astype(str)
-                dat['packedbits'] = False
         else:
             logging.error("Unknown filetype %s. Expected `.vcf[.gz]`, `.jl`, or `.hdf5`", i)
             sys.exit(1)
@@ -258,7 +257,7 @@ def load_files(in_files, lowmem=False, load_af=False, into_hdf5=None):
             logging.critical(f"Different samples in {i}")
             sys.exit(1)
 
-        if dat['packedbits']:
+        if not i.endswith(".hdf5"):
             upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples']))
             gt_parts.append(upack.astype(bool))
         else:
@@ -366,7 +365,7 @@ def select_main(cmdargs):
     """
     args = parse_args(cmdargs)
 
-    data = load_files(args.in_files, args.lowmem, args.af, args.concat)
+    data = load_files(args.in_files, args.lowmem, args.concat)
     args.subset = parse_sample_lists(args.subset)
     args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)

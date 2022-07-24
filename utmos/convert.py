@@ -27,16 +27,12 @@ def parse_args(args):
                         help="Length (number of variants) of chunks in which data are processed. (%(default)s)")
     parser.add_argument("-c", "--compress", type=int, default=5,
                         help="joblib compress level 1-9 (%(default)s)")
-    parser.add_argument("-p", "--nopackbits", action="store_false",
-                        help="Use numpy.packbits to make output smaller (%(default)s)")
-    parser.add_argument("--af", action="store_true",
-                        help="Calcluate allele frequencies (%(default)s)")
 
     args = parser.parse_args(args)
     truvari.setup_logging()
     return args
 
-def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False, chunk_length=2^14):
+def read_vcf(in_file, lowmem=False, chunk_length=2^14):
     """
     Read a vcf's genotypes and return numpy arrays
     """
@@ -61,12 +57,10 @@ def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False, chunk_len
     logging.info(f"{num_homs} homs")
     v_count = is_het | is_hom
 
-    af = None
-    if allele_freq:
-        logging.info("Calculating AFs")
-        af = gts.count_alleles().to_frequencies()[:, 1]
-        # Needs to be reshaped for future multiplications
-        af = af.reshape(af.shape[0], 1)
+    logging.info("Calculating AFs")
+    af = gts.count_alleles().to_frequencies()[:, 1]
+    # Needs to be reshaped for future multiplications
+    af = af.reshape(af.shape[0], 1)
 
     if lowmem:
         data = {"GT": v_count, "samples": data["samples"][:].astype(str)}
@@ -75,11 +69,7 @@ def read_vcf(in_file, lowmem=False, allele_freq=False, packbits=False, chunk_len
         data["GT"] = v_count
     data["AF"] = af
 
-    if packbits:
-        data["GT"] = np.packbits(data["GT"], axis=1)
-        data['packedbits'] = True
-    else:
-        data['packedbits'] = False
+    data["GT"] = np.packbits(data["GT"], axis=1)
 
     data["stats"] = {'num_het': num_hets, 'num_hom': num_homs}
     return data
@@ -89,8 +79,7 @@ def cvt_main(cmdargs):
     Main
     """
     args = parse_args(cmdargs)
-    # fields = optionaly AF (make sure its consistent with Number=[./1 whatever]
-    data = read_vcf(args.in_file, args.lowmem, args.af, args.nopackbits, args.chunk_length)
+    data = read_vcf(args.in_file, args.lowmem, args.chunk_length)
     logging.info("Saving genotypes")
     joblib.dump(data, args.out_file, compress=args.compress)
     logging.info("Finished conversion")
