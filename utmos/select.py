@@ -6,6 +6,7 @@ import sys
 import logging
 import argparse
 
+import h5py
 import joblib
 import truvari
 import numpy as np
@@ -158,6 +159,11 @@ def run_selection(data, out_fn, max_reporting=0.02, subset=None, include=None, e
     num_samples = gt_matrix.shape[1]
     num_vars = gt_matrix.shape[0]
 
+    if exclude is None:
+        exclude = []
+    if include is None:
+        include = []
+
     if subset:
         keep = np.isin(vcf_samples, subset)
         logging.info("Subsetting to %d of %d samples", keep.sum(), num_samples)
@@ -190,12 +196,38 @@ def samp_same(a, b):
     Make sure samples are identical
     return true if they're identical
     """
-    return True # temporary skip until we can test/fix
+    logging.debug("same samp is temporarily off until we can test/fix")
+    logging.debug("Would be comparing %s <-> %s", str(a), str(b))
+    return True
     #return len(a) == len(b) and np.equal(a, b).all()
 
-def load_files(in_files, lowmem=False, load_af=False):
+def write_append_hdf5(cur_part, out_name, is_first=False):
+    """
+    Handle the hdf5 file
+    !!TODO - handle when AF is not present
+    !!TODO - handle when fn already exists
+    """
+    if is_first:
+        with h5py.File(out_name, 'w') as hf:
+            hf.create_dataset('GT', data=cur_part["GT"], compression="gzip", chunks=True, maxshape=(None, cur_part['GT'].shape[1]))
+            hf.create_dataset('AF', data=cur_part["AF"], compression="gzip", chunks=True, maxshape=(None, cur_part['AF'].shape[1]))
+            hf.create_dataset('samples', data=cur_part["samples"], compression="gzip", chunks=True, maxshape=(None,))
+        return
+
+    with h5py.File(out_name, 'a') as hf:
+        hf["GT"].resize((hf["GT"].shape[0] + cur_part["GT"].shape[0]), axis = 0)
+        hf["GT"][-cur_part["GT"].shape[0]:] = cur_part["GT"]
+
+        hf["AF"].resize((hf["AF"].shape[0] + cur_part["AF"].shape[0]), axis = 0)
+        hf["AF"][-cur_part["AF"].shape[0]:] = cur_part["AF"]
+
+
+def load_files(in_files, lowmem=False, load_af=False, into_hdf5=None):
     """
     Load and concatenate multiple files
+    set the into_hdf5 into a filename to write the parts into an hdf5 file as the concatenation goes on.
+    This may be a little slower, but will use less memory since it won't need to hold two copies of the
+    data in memory during the concatenation step.
     """
     file_cnt = len(in_files)
     logging.info(f"Loading {file_cnt} files")
@@ -203,13 +235,21 @@ def load_files(in_files, lowmem=False, load_af=False):
     gt_parts = []
     af_parts = []
     load_count = 0
+    is_first = True
     for i in in_files:
         if i.endswith((".vcf.gz", ".vcf")):
             dat = read_vcf(i, lowmem, load_af)
         elif i.endswith(".jl"):
             dat = joblib.load(i)
+        elif i.endswith(".hdf5"):
+            dat = {}
+            with h5py.File(i, 'r') as hf:
+                dat['GT'] = hf['GT'][:]
+                dat['AF'] = hf['AF'][:]
+                dat['samples'] = hf['samples'][:].astype(str)
+                dat['packedbits'] = False
         else:
-            logging.error("Unknown filetype %s. Expected `.vcf[.gz]` or `.jl`", i)
+            logging.error("Unknown filetype %s. Expected `.vcf[.gz]`, `.jl`, or `.hdf5`", i)
             sys.exit(1)
 
         if samples is None:
@@ -226,7 +266,26 @@ def load_files(in_files, lowmem=False, load_af=False):
 
         af_parts.append(dat['AF'])
         load_count += 1
+        if into_hdf5 is not None:
+            write_append_hdf5({'GT':gt_parts[0],
+                               'samples':samples,
+                               'AF': af_parts[0] if load_af else None},
+                               into_hdf5,
+                               is_first)
+            # reset
+            is_first = False
+            gt_parts = []
+            af_parts = []
+
         logging.debug("Loaded %d of %d (%.2f)", load_count, file_cnt, load_count / file_cnt * 100)
+
+    if into_hdf5 is not None:
+        ret = {}
+        with h5py.File(into_hdf5, 'r') as hf:
+            ret["GT"] = hf["GT"][:]
+            ret["AF"] = hf["AF"][:]
+            ret['samples'] = hf["samples"][:].astype(str)
+        return ret
 
     if len(gt_parts) > 1:
         logging.info("Concatenating")
@@ -275,6 +334,8 @@ def parse_args(args):
                         help="Use temporary files to lower memory usage during vcf conversion (%(default)s)")
     parser.add_argument("-o", "--out", type=str, default="/dev/stdout",
                         help="Output file (stdout)")
+    parser.add_argument("--concat", type=str, default=None,
+                        help="Name of an hdf5 file to concatenate results (%(default)s)")
     parser.add_argument("-m", "--mode", type=str, default='greedy', choices=SELECTORS.keys(),
                         help="Selection algo to use greedy (default), topN, or random")
     parser.add_argument("-c", "--count", type=float, default=0.02,
@@ -292,6 +353,9 @@ def parse_args(args):
     parser.add_argument("--debug", action="store_true",
                         help="Verbose logging")
     args = parser.parse_args(args)
+    if args.concat is not None and not args.af:
+        logging.error("--concat can only be used with --af")
+        sys.exit(1)
     truvari.setup_logging(args.debug)
     return args
 
@@ -302,7 +366,7 @@ def select_main(cmdargs):
     """
     args = parse_args(cmdargs)
 
-    data = load_files(args.in_files, args.lowmem, args.af)
+    data = load_files(args.in_files, args.lowmem, args.af, args.concat)
     args.subset = parse_sample_lists(args.subset)
     args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)
