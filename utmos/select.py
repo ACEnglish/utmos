@@ -263,7 +263,7 @@ def load_files(in_files, lowmem=None, chunk_length=2^14):
     load_row_count = 0
     load_buffer_count = 0
     is_first = True
-    for i in in_files:
+    for pos, i in enumerate(in_files):
         if i.endswith((".vcf.gz", ".vcf")):
             dat = read_vcf(i, lowmem is not None)
         elif i.endswith(".jl"):
@@ -293,7 +293,7 @@ def load_files(in_files, lowmem=None, chunk_length=2^14):
         m_count = dat["GT"].shape[0]
         load_row_count += m_count
         load_buffer_count += m_count
-        if lowmem is not None and load_buffer_count >= chunk_length:
+        if lowmem is not None and (load_buffer_count >= chunk_length or pos == len(in_files) - 1):
             logging.debug("dumping chunk %d", chunk_length)
             cur_chunk = None
             if len(gt_parts) > 1:
