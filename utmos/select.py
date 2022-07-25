@@ -246,7 +246,7 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
         hf["AF_matrix"][-af_matrix.shape[0]:] = af_matrix
 
 
-def load_files(in_files, lowmem=None):
+def load_files(in_files, lowmem=None, chunk_length=2^14):
     """
     Load and concatenate multiple files
     if lowmem is provided, in_files are concatenated into an hdf5. This may be a little slower,
@@ -260,6 +260,8 @@ def load_files(in_files, lowmem=None):
     gt_parts = []
     af_parts = []
     load_count = 0
+    load_row_count = 0
+    load_buffer_count = 0
     is_first = True
     for i in in_files:
         if i.endswith((".vcf.gz", ".vcf")):
@@ -286,22 +288,31 @@ def load_files(in_files, lowmem=None):
 
         upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples']))
         gt_parts.append(upack.astype(bool))
-
         af_parts.append(dat['AF'])
         load_count += 1
-        if lowmem is not None:
-            # TODO, need to build the af_matrix here, also
-            write_append_hdf5({'GT':gt_parts[0],
-                               'samples':samples,
-                               'AF': af_parts[0]},
-                               lowmem,
-                               is_first)
+        m_count = dat["AF"].shape[0]
+        load_row_count += m_count
+        load_buffer_count += m_count
+        if lowmem is not None and load_buffer_count >= chunk_length:
+            cur_chunk = None
+            if len(gt_parts) > 1:
+                cur_chunk = {'GT': np.concatenate(gt_parts),
+                             'samples': samples,
+                             'AF': np.concatenate(af_parts)}
+            else:
+                cur_chunk = {'GT':gt_parts[0],
+                             'samples':samples,
+                             'AF': af_parts[0]}
+            
+            write_append_hdf5(cur_chunk, lowmem, is_first)
             # reset
+            load_buffer_count = 0
             is_first = False
             gt_parts = []
             af_parts = []
 
-        logging.debug("Loaded %d of %d (%.2f)", load_count, file_cnt, load_count / file_cnt * 100)
+        logging.debug("Loaded %d of %d (%.2f%%) with %d vars (%d buff)", load_count, file_cnt,
+                      load_count / file_cnt * 100, load_row_count, load_buffer_count)
 
     if lowmem is not None:
         return h5py.File(lowmem, 'r')
