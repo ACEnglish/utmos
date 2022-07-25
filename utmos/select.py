@@ -394,7 +394,7 @@ def select_main(cmdargs):
     """
     args = parse_args(cmdargs)
 
-    data = load_files(args.in_files, args.lowmem)
+    data = load_files(args.in_files, args.lowmem, args.chunk_length)
     args.subset = parse_sample_lists(args.subset)
     #args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)
