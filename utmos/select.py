@@ -24,25 +24,32 @@ def do_summation(matrix, variant_mask, sample_mask, chunk_length=32768):
         return matrix[~variant_mask].sum(axis=0) * sample_mask
     # sum over chunks
     m_sum = np.zeros(matrix.shape[1])
-    for i in range(0, matrix.shape[0], chunk_length):
-        chunk_end = min(i + chunk_length, matrix.shape[0])
-        cur_v_mask = variant_mask[i:chunk_end]
-        cur_chunk = matrix[i:chunk_end]
-        m_sum += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask
+    for i in matrix.iter_chunks():
+        cur_v_mask = variant_mask[i[0]]
+        cur_chunk = matrix[i]
+        m_sum[i[1]] += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask[i[1]]
+    #for i in range(0, matrix.shape[0], chunk_length):
+        #chunk_end = min(i + chunk_length, matrix.shape[0])
+        #cur_v_mask = variant_mask[i:chunk_end]
+        #cur_chunk = matrix[i:chunk_end]
+        #m_sum += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask
     return m_sum
 
 def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights, chunk_length=32768):
     """
     return number of variants and the scores per-sample for this iteration
     """
+    logging.debug("gt_matrix sum")
     cur_sample_count = do_summation(gt_matrix, variant_mask, sample_mask, chunk_length)
 
     sample_scores = cur_sample_count
     if af_matrix is not None:
+        logging.debug("af_matrix sum")
         sample_scores = do_summation(af_matrix, variant_mask, sample_mask, chunk_length)
     elif sample_weights is not None:
         sample_scores = cur_sample_count.copy()
     if sample_weights is not None:
+        logging.debug("applying weights")
         sample_scores = sample_scores * sample_weights
     return cur_sample_count, sample_scores
 
@@ -62,6 +69,7 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
     """
     num_vars = gt_matrix.shape[0]
     # Only need to calculate this once
+    logging.debug("getting total_variant_count")
     if isinstance(gt_matrix, h5py.Dataset):
         total_variant_count = gt_matrix[:].sum(axis=0)
     else:
