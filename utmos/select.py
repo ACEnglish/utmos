@@ -147,7 +147,7 @@ SELECTORS = {"greedy": greedy_select,
              "topN": topN_select,
              "random": random_select}
 
-def run_selection(data, out_fn, max_reporting=0.02, subset=None, include=None, exclude=None, weights=None, mode='greedy'):
+def run_selection(data, out_fn, max_reporting=0.02, subset=None, include=None, exclude=None, af=False, weights=None, mode='greedy'):
     """
     Setup the selection calculation
     if max_reporting [0,1], select that percent of samples
@@ -186,7 +186,7 @@ def run_selection(data, out_fn, max_reporting=0.02, subset=None, include=None, e
     with open(out_fn, 'w') as out:
         out.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
         m_iter = mode(gt_matrix, vcf_samples, max_reporting, include,
-                      exclude, af_data, sample_weights)
+                      exclude, af_data if af else None, sample_weights)
         for result in m_iter:
             logging.info("Selected %s (%s)", result[0], result[4])
             out.write("\t".join([str(_) for _ in result]) + '\n')
@@ -268,7 +268,7 @@ def load_files(in_files, lowmem=False, into_hdf5=None):
         if into_hdf5 is not None:
             write_append_hdf5({'GT':gt_parts[0],
                                'samples':samples,
-                               'AF': af_parts[0] if load_af else None},
+                               'AF': af_parts[0]},
                                into_hdf5,
                                is_first)
             # reset
@@ -290,11 +290,11 @@ def load_files(in_files, lowmem=False, into_hdf5=None):
         logging.info("Concatenating")
         return  {'GT':np.concatenate(gt_parts),
                  'samples':samples,
-                 'AF': np.concatenate(af_parts) if load_af else None}
+                 'AF': np.concatenate(af_parts)}
 
     return  {'GT':gt_parts[0],
              'samples':samples,
-             'AF': af_parts[0] if load_af else None}
+             'AF': af_parts[0]}
 
 def parse_sample_lists(argument):
     """
@@ -372,7 +372,7 @@ def select_main(cmdargs):
     args.weights = parse_weights(args.weights)
 
     run_selection(data, args.out, args.count, args.subset,
-                  args.include, args.exclude,
+                  args.include, args.exclude, args.af,
                   args.weights, args.mode)
 
     logging.info("Finished")
