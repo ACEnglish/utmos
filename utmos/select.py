@@ -220,19 +220,20 @@ def samp_same(a, b):
     return True
     #return len(a) == len(b) and np.equal(a, b).all()
 
-def write_append_hdf5(cur_part, out_name, is_first=False):
+def write_append_hdf5(cur_part, out_name, is_first=False, chunk_length=2^14):
     """
     Handle the hdf5 file
     !!TODO - handle when fn already exists
     """
     # Future - make af_matrix optional
     af_matrix = cur_part["GT"] * cur_part["AF"]
+    n_cols = cur_part['GT'].shape[1]
     if is_first:
         with h5py.File(out_name, 'w') as hf:
-            hf.create_dataset('GT', data=cur_part["GT"], chunks=True, maxshape=(None, cur_part['GT'].shape[1]))
-            hf.create_dataset('AF', data=cur_part["AF"], chunks=True, maxshape=(None, cur_part['AF'].shape[1]))
-            hf.create_dataset('AF_matrix', data=af_matrix, chunks=True, maxshape=(None, cur_part['GT'].shape[1]))
-            hf.create_dataset('samples', data=cur_part["samples"], chunks=True, maxshape=(None,))
+            hf.create_dataset('GT', data=cur_part["GT"], compression="gzip", chunks=(chunk_length, n_cols), maxshape=(None, n_cols))
+            hf.create_dataset('AF', data=cur_part["AF"], compression="gzip", chunks=(chunk_length, 1), maxshape=(None, 1))
+            hf.create_dataset('AF_matrix', data=af_matrix, compression="gzip", chunks=(chunk_length, n_cols), maxshape=(None, n_cols))
+            hf.create_dataset('samples', data=cur_part["samples"], compression="gzip", chunks=True, maxshape=(None,))
         return
 
     with h5py.File(out_name, 'a') as hf:
@@ -305,7 +306,7 @@ def load_files(in_files, lowmem=None, chunk_length=2^14):
                              'samples':samples,
                              'AF': af_parts[0]}
             
-            write_append_hdf5(cur_chunk, lowmem, is_first)
+            write_append_hdf5(cur_chunk, lowmem, is_first, chunk_length)
             # reset
             load_buffer_count = 0
             is_first = False
