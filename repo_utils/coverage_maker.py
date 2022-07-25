@@ -22,5 +22,5 @@ badge = anybadge.Badge('coverage', coverage_pct,
 badge.write_badge('imgs/coverage.svg', overwrite=True)
 
 # failunder
-if coverage_pct < 95:
+if coverage_pct < 85:
     exit(1)
