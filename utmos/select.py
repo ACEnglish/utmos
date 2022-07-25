@@ -290,10 +290,11 @@ def load_files(in_files, lowmem=None, chunk_length=2^14):
         gt_parts.append(upack.astype(bool))
         af_parts.append(dat['AF'])
         load_count += 1
-        m_count = dat["AF"].shape[0]
+        m_count = dat["GT"].shape[0]
         load_row_count += m_count
         load_buffer_count += m_count
         if lowmem is not None and load_buffer_count >= chunk_length:
+            logging.debug("dumping chunk")
             cur_chunk = None
             if len(gt_parts) > 1:
                 cur_chunk = {'GT': np.concatenate(gt_parts),
