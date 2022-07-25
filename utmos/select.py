@@ -229,10 +229,10 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     af_matrix = cur_part["GT"] * cur_part["AF"]
     if is_first:
         with h5py.File(out_name, 'w') as hf:
-            hf.create_dataset('GT', data=cur_part["GT"], compression="gzip", chunks=True, maxshape=(None, cur_part['GT'].shape[1]))
-            hf.create_dataset('AF', data=cur_part["AF"], compression="gzip", chunks=True, maxshape=(None, cur_part['AF'].shape[1]))
-            hf.create_dataset('AF_matrix', data=af_matrix, compression="gzip", chunks=True, maxshape=(None, cur_part['GT'].shape[1]))
-            hf.create_dataset('samples', data=cur_part["samples"], compression="gzip", chunks=True, maxshape=(None,))
+            hf.create_dataset('GT', data=cur_part["GT"], chunks=True, maxshape=(None, cur_part['GT'].shape[1]))
+            hf.create_dataset('AF', data=cur_part["AF"], chunks=True, maxshape=(None, cur_part['AF'].shape[1]))
+            hf.create_dataset('AF_matrix', data=af_matrix, chunks=True, maxshape=(None, cur_part['GT'].shape[1]))
+            hf.create_dataset('samples', data=cur_part["samples"], chunks=True, maxshape=(None,))
         return
 
     with h5py.File(out_name, 'a') as hf:
@@ -294,7 +294,7 @@ def load_files(in_files, lowmem=None, chunk_length=2^14):
         load_row_count += m_count
         load_buffer_count += m_count
         if lowmem is not None and (load_buffer_count >= chunk_length or pos == len(in_files) - 1):
-            logging.debug("dumping chunk %d", chunk_length)
+            logging.debug("dumping chunk %d", load_buffer_count)
             cur_chunk = None
             if len(gt_parts) > 1:
                 cur_chunk = {'GT': np.concatenate(gt_parts),
