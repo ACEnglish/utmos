@@ -230,9 +230,9 @@ def write_append_hdf5(cur_part, out_name, is_first=False, chunk_length=2^14):
     n_cols = cur_part['GT'].shape[1]
     if is_first:
         with h5py.File(out_name, 'w') as hf:
-            hf.create_dataset('GT', data=cur_part["GT"], compression="gzip", chunks=(chunk_length, n_cols), maxshape=(None, n_cols))
-            hf.create_dataset('AF', data=cur_part["AF"], compression="gzip", chunks=(chunk_length, 1), maxshape=(None, 1))
-            hf.create_dataset('AF_matrix', data=af_matrix, compression="gzip", chunks=(chunk_length, n_cols), maxshape=(None, n_cols))
+            hf.create_dataset('GT', data=cur_part["GT"], compression="gzip", chunks=True, maxshape=(None, n_cols))
+            hf.create_dataset('AF', data=cur_part["AF"], compression="gzip", chunks=True, maxshape=(None, 1))
+            hf.create_dataset('AF_matrix', data=af_matrix, compression="gzip", chunks=True, maxshape=(None, n_cols))
             hf.create_dataset('samples', data=cur_part["samples"], compression="gzip", chunks=True, maxshape=(None,))
         return
 
