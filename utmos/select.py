@@ -14,7 +14,7 @@ import pandas as pd
 
 from utmos.convert import read_vcf
 
-def do_summation(matrix, variant_mask, sample_mask, chunk_length=2^14):
+def do_summation(matrix, variant_mask, sample_mask, chunk_length=32768):
     """
     Sum the matrix along axis=0
     if the matrix is an h5py.File, we'll operate in chunks
@@ -31,7 +31,7 @@ def do_summation(matrix, variant_mask, sample_mask, chunk_length=2^14):
         m_sum += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask
     return m_sum
 
-def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights, chunk_length=2^14):
+def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights, chunk_length=32768):
     """
     return number of variants and the scores per-sample for this iteration
     """
@@ -47,7 +47,7 @@ def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_wei
     return cur_sample_count, sample_scores
 
 def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix=None,
-                  sample_weights=None, chunk_length=2^14):
+                  sample_weights=None, chunk_length=32768):
     """
     Greedy calculation
     yields rows of each selected sample's information
@@ -157,7 +157,7 @@ SELECTORS = {"greedy": greedy_select}
              #"random": random_select}
 
 def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=None, af=False,
-                  weights=None, chunk_length=2^14):
+                  weights=None, chunk_length=32768):
     """
     Setup the selection calculation
     if select_count [0,1], select that percent of samples
@@ -215,19 +215,19 @@ def samp_same(a, b):
     Make sure samples are identical
     return true if they're identical
     """
-    logging.debug("same samp is temporarily off until we can test/fix")
-    logging.debug("Would be comparing %s <-> %s", str(a), str(b))
     return True
     #return len(a) == len(b) and np.equal(a, b).all()
 
-def write_append_hdf5(cur_part, out_name, is_first=False, chunk_length=2^14):
+def write_append_hdf5(cur_part, out_name, is_first=False):
     """
     Handle the hdf5 file
     !!TODO - handle when fn already exists
     """
     # Future - make af_matrix optional
+    logging.debug('calc af')
     af_matrix = cur_part["GT"] * cur_part["AF"]
     n_cols = cur_part['GT'].shape[1]
+    logging.debug('write')
     if is_first:
         with h5py.File(out_name, 'w') as hf:
             hf.create_dataset('GT', data=cur_part["GT"], compression="gzip", chunks=True, maxshape=(None, n_cols))
@@ -247,7 +247,7 @@ def write_append_hdf5(cur_part, out_name, is_first=False, chunk_length=2^14):
         hf["AF_matrix"][-af_matrix.shape[0]:] = af_matrix
 
 
-def load_files(in_files, lowmem=None, chunk_length=2^14):
+def load_files(in_files, lowmem=None, chunk_length=32768):
     """
     Load and concatenate multiple files
     if lowmem is provided, in_files are concatenated into an hdf5. This may be a little slower,
@@ -295,7 +295,7 @@ def load_files(in_files, lowmem=None, chunk_length=2^14):
         load_row_count += m_count
         load_buffer_count += m_count
         if lowmem is not None and (load_buffer_count >= chunk_length or pos == len(in_files) - 1):
-            logging.debug("dumping chunk %d", load_buffer_count)
+            logging.debug("dumping chunk with %d vars", load_buffer_count)
             cur_chunk = None
             if len(gt_parts) > 1:
                 cur_chunk = {'GT': np.concatenate(gt_parts),
@@ -306,7 +306,7 @@ def load_files(in_files, lowmem=None, chunk_length=2^14):
                              'samples':samples,
                              'AF': af_parts[0]}
             
-            write_append_hdf5(cur_chunk, lowmem, is_first, chunk_length)
+            write_append_hdf5(cur_chunk, lowmem, is_first)
             # reset
             load_buffer_count = 0
             is_first = False
@@ -364,7 +364,7 @@ def parse_args(args):
                         help="Input VCF or jl files")
     parser.add_argument("--lowmem", type=str, default=None,
                         help="Name of concatenated hdf5 file to create, which reduces memory usage (%(default)s)")
-    parser.add_argument("-C", "--chunk-length", type=int, default=2^14,
+    parser.add_argument("--chunk-length", type=int, default=32768,
                         help="When using `--lowmem`, number of variants to process at a time (%(default)s)")
     parser.add_argument("-o", "--out", type=str, default="/dev/stdout",
                         help="Output file (stdout)")
