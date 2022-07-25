@@ -294,7 +294,7 @@ def load_files(in_files, lowmem=None, chunk_length=2^14):
         load_row_count += m_count
         load_buffer_count += m_count
         if lowmem is not None and load_buffer_count >= chunk_length:
-            logging.debug("dumping chunk")
+            logging.debug("dumping chunk %d", chunk_length)
             cur_chunk = None
             if len(gt_parts) > 1:
                 cur_chunk = {'GT': np.concatenate(gt_parts),
