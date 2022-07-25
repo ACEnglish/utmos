@@ -269,13 +269,12 @@ def load_files(in_files, lowmem=None, chunk_length=32768):
             dat = read_vcf(i, lowmem is not None)
         elif i.endswith(".jl"):
             dat = joblib.load(i)
-        # Future - allow an hdf5 to be input
-        #elif i.endswith(".hdf5"):
-        #    dat = {}
-        #    with h5py.File(i, 'r') as hf:
-        #        dat['GT'] = hf['GT'][:]
-        #        dat['AF'] = hf['AF'][:]
-        #        dat['samples'] = hf['samples'][:].astype(str)
+        elif i.endswith(".hdf5"):
+            if len(in_files) > 1:
+                logging.error("Only one hdf5 file at a time!")
+                sys.exit(1)
+            logging.info("Loading single hdf5")
+            return h5py.File(i, 'r')
         else:
             logging.error("Unknown filetype %s. Expected `.vcf[.gz]`, `.jl`, or `.hdf5`", i)
             sys.exit(1)
