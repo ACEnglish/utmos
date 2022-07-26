@@ -240,9 +240,15 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     # Future - make af_matrix optional
     logging.debug('calc af')
     should_filter = cur_part["GT"].any(axis=1)
-    cur_part["GT"] = cur_part["GT"][should_filter]
-    cur_part["AF"] = cur_part["AF"][should_filter]
+    logging.debug("fitering %d uninformative variants", ~should_filter.sum())
+    logging.debug(cur_part["GT"].shape)
 
+    m_order = cur_part["AF"].argsort(axis=0)[should_filter, 0]
+    logging.debug("and sorting %s")#, should_filter.sum())
+    cur_part["GT"] = cur_part["GT"][m_order]
+    cur_part["AF"] = cur_part["AF"][m_order]
+
+    logging.debug(cur_part["GT"].shape)
     af_matrix = cur_part["GT"] * cur_part["AF"]
     af_matrix[np.isnan(af_matrix)] = 0
     n_cols = cur_part['GT'].shape[1]
@@ -307,6 +313,7 @@ def load_files(in_files, lowmem=None, chunk_length=32768):
             logging.critical(f"Different samples in {i}")
             sys.exit(1)
 
+        # could do per-variant filtering here...
         upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples']))
         gt_parts.append(upack.astype(bool))
         af_parts.append(dat['AF'])
