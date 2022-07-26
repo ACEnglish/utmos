@@ -188,11 +188,11 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
 
     sample_mask = np.ones(num_samples, dtype='bool')
     if subset:
-        sample_mask = np.isin(vcf_samples, subset)
         logging.info("Subsetting to %d of %d samples", sample_mask.sum(), num_samples)
+        sample_mask = np.isin(vcf_samples, subset)
     logging.info(f"Excluding {len(exclude)} samples")
     sample_mask = sample_mask & ~np.isin(vcf_samples, exclude)
-
+    logging.debug(f"ending with {sample_mask.sum()} samples")
     sample_weights = None
     if weights is not None:
         logging.info("Setting %d weights", len(weights))
@@ -200,7 +200,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
         for pos, i in enumerate(vcf_samples):
             if i in weights.index:
                 sample_weights[pos] = weights.loc[i]
-
+    logging.debug("finished with weights")
     gt_matrix = data['GT']
     af_matrix = None
     if af and isinstance(data, h5py.File):
