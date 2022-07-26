@@ -239,12 +239,12 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     """
     # Future - make af_matrix optional
     logging.debug('calc af')
-    should_filter = ~cur_part["GT"].any(axis=0)
+    should_filter = cur_part["GT"].any(axis=1)
     cur_part["GT"] = cur_part["GT"][should_filter]
     cur_part["AF"] = cur_part["AF"][should_filter]
 
     af_matrix = cur_part["GT"] * cur_part["AF"]
-    af_matrix[np.isnan(af_marix)] = 0
+    af_matrix[np.isnan(af_matrix)] = 0
     n_cols = cur_part['GT'].shape[1]
     c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
     if is_first:
