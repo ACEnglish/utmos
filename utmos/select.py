@@ -88,6 +88,7 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
         # don't want to use these variants anymore - this is anti-pattern to chunks
         logging.debug('updating variant mask') 
         variant_mask = variant_mask | gt_matrix[:, use_sample]
+        # do this - up--front... ishg oa;wihef
         # or this sample
         sample_mask[use_sample] = False
         # update running total number of variants
@@ -238,6 +239,10 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     """
     # Future - make af_matrix optional
     logging.debug('calc af')
+    should_filter = ~cur_part["GT"].any(axis=0)
+    cur_part["GT"] = cur_part["GT"][should_filter]
+    cur_part["AF"] = cur_part["AF"][should_filter]
+
     af_matrix = cur_part["GT"] * cur_part["AF"]
     af_matrix[np.isnan(af_marix)] = 0
     n_cols = cur_part['GT'].shape[1]
