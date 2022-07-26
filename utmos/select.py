@@ -204,7 +204,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     logging.debug("finished with weights")
     if logging.root.level <= logging.DEBUG:
         logging.debug("pre-flight variant check")
-        cnt = gt_matrix.any(axis=1).sum()
+        cnt = gt_matrix[:,sample_mask].any(axis=1).sum()
         logging.debug("have %d variants to process", cnt)
  
     gt_matrix = data['GT']
