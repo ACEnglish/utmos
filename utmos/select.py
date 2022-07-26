@@ -211,7 +211,8 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
         af_matrix = data["AF_matrix"]
     elif af:
         logging.info("Calculating AF matrix")
-        af_matrix = np.nan_to_num(gt_matrix * data['AF'])
+        af_matrix = gt_matrix * data['AF']
+        np.nan_to_num(af_matrix, copy=False)
 
     #if logging.root.level <= logging.DEBUG:
     #    logging.debug("pre-flight variant check")
@@ -237,7 +238,8 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     """
     # Future - make af_matrix optional
     logging.debug('calc af')
-    af_matrix = np.nan_to_num(cur_part["GT"] * cur_part["AF"])
+    af_matrix = cur_part["GT"] * cur_part["AF"]
+    np.nan_to_num(af_matrix, copy=False)
     n_cols = cur_part['GT'].shape[1]
     c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
     if is_first:
