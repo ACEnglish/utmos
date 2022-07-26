@@ -22,17 +22,12 @@ def do_summation(matrix, variant_mask, sample_mask, chunk_length=32768):
     """
     if not isinstance(matrix, h5py.Dataset):
         return matrix[~variant_mask].sum(axis=0) * sample_mask
-    # sum over chunks
+
     m_sum = np.zeros(matrix.shape[1])
     for i in matrix.iter_chunks():
         cur_v_mask = variant_mask[i[0]]
         cur_chunk = matrix[i]
         m_sum[i[1]] += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask[i[1]]
-    #for i in range(0, matrix.shape[0], chunk_length):
-        #chunk_end = min(i + chunk_length, matrix.shape[0])
-        #cur_v_mask = variant_mask[i:chunk_end]
-        #cur_chunk = matrix[i:chunk_end]
-        #m_sum += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask
     return m_sum
 
 def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights, chunk_length=32768):
@@ -71,8 +66,6 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
     # Only need to calculate this once
     logging.debug("getting total_variant_count")
     if isinstance(gt_matrix, h5py.Dataset):
-        t_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
-        s_mask = np.ones(gt_matrix.shape[0], dtype='bool')
         total_variant_count = do_summation(gt_matrix, variant_mask, sample_mask, chunk_length)
     else:
         total_variant_count = gt_matrix.sum(axis=0)
@@ -237,21 +230,22 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     logging.debug('calc af')
     af_matrix = cur_part["GT"] * cur_part["AF"]
     n_cols = cur_part['GT'].shape[1]
+    c_size = (int(1e6 / 4 / n_cols), n_cols)
     logging.debug('write')
     if is_first:
         with h5py.File(out_name, 'w') as hf:
-            hf.create_dataset('GT', data=cur_part["GT"], compression="gzip", chunks=True, maxshape=(None, n_cols))
-            hf.create_dataset('AF', data=cur_part["AF"], compression="gzip", chunks=True, maxshape=(None, 1))
-            hf.create_dataset('AF_matrix', data=af_matrix, compression="gzip", chunks=True, maxshape=(None, n_cols))
-            hf.create_dataset('samples', data=cur_part["samples"], compression="gzip", chunks=True, maxshape=(None,))
+            hf.create_dataset('GT', data=cur_part["GT"], compression="lzf", chunks=c_size, maxshape=(None, n_cols))
+            #hf.create_dataset('AF', data=cur_part["AF"], compression="lzf", chunks=True, maxshape=(None, 1))
+            hf.create_dataset('AF_matrix', data=af_matrix, compression="lzf", chunks=c_size, maxshape=(None, n_cols))
+            hf.create_dataset('samples', data=cur_part["samples"], compression="lzf", chunks=True, maxshape=(None,))
         return
 
     with h5py.File(out_name, 'a') as hf:
         hf["GT"].resize((hf["GT"].shape[0] + cur_part["GT"].shape[0]), axis = 0)
         hf["GT"][-cur_part["GT"].shape[0]:] = cur_part["GT"]
 
-        hf["AF"].resize((hf["AF"].shape[0] + cur_part["AF"].shape[0]), axis = 0)
-        hf["AF"][-cur_part["AF"].shape[0]:] = cur_part["AF"]
+        #hf["AF"].resize((hf["AF"].shape[0] + cur_part["AF"].shape[0]), axis = 0)
+        #hf["AF"][-cur_part["AF"].shape[0]:] = cur_part["AF"]
 
         hf["AF_matrix"].resize((hf["AF_matrix"].shape[0] + af_matrix.shape[0]), axis = 0)
         hf["AF_matrix"][-af_matrix.shape[0]:] = af_matrix
@@ -284,7 +278,8 @@ def load_files(in_files, lowmem=None, chunk_length=32768):
                 logging.error("Only one hdf5 file at a time!")
                 sys.exit(1)
             logging.info("Loading single hdf5")
-            return h5py.File(i, 'r')
+            lowmem = i
+            break
         else:
             logging.error("Unknown filetype %s. Expected `.vcf[.gz]`, `.jl`, or `.hdf5`", i)
             sys.exit(1)
