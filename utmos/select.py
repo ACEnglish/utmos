@@ -202,10 +202,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
             if i in weights.index:
                 sample_weights[pos] = weights.loc[i]
     logging.debug("finished with weights")
-    if logging.root.level <= logging.DEBUG:
-        logging.debug("pre-flight variant check")
-        cnt = gt_matrix[:,sample_mask].any(axis=1).sum()
-        logging.debug("have %d variants to process", cnt)
+
  
     gt_matrix = data['GT']
     af_matrix = None
@@ -214,6 +211,11 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     elif af:
         logging.info("Calculating AF matrix")
         af_matrix = gt_matrix * data['AF']
+
+    if logging.root.level <= logging.DEBUG:
+        logging.debug("pre-flight variant check")
+        cnt = gt_matrix[:,sample_mask].any(axis=1).sum()
+        logging.debug("have %d variants to process", cnt)
 
     m_select = SELECTORS[mode]
     return m_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix,
