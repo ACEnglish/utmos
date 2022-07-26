@@ -416,7 +416,7 @@ def select_main(cmdargs):
     with open(args.out, 'w') as fout:
         fout.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
         m_iter = run_selection(data, args.count, args.mode, args.subset,
-                               args.exclude, args.af, args.weights, args.chunk_length)
+                               args.exclude, args.af, args.weights)
         for result in m_iter:
             logging.info("Selected %s (%s)", result[0], result[4])
             fout.write("\t".join([str(_) for _ in result]) + '\n')
