@@ -71,7 +71,9 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
     # Only need to calculate this once
     logging.debug("getting total_variant_count")
     if isinstance(gt_matrix, h5py.Dataset):
-        total_variant_count = gt_matrix[:].sum(axis=0)
+        t_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
+        s_mask = np.ones(gt_matrix.shape[0], dtype='bool')
+        total_variant_count = do_summation(gt_matrix, variant_mask, sample_mask, chunk_length)
     else:
         total_variant_count = gt_matrix.sum(axis=0)
 
@@ -98,7 +100,7 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
             logging.warning("Ran out of new variants")
             break
 
-        yield [vcf_samples[use_sample], variant_count, int(new_variant_count),
+        yield [vcf_samples[use_sample], int(variant_count), int(new_variant_count),
                int(tot_captured), round(tot_captured / num_vars, 4)]
 
 def topN_select(gt_matrix, vcf_samples, max_reporting, include, exclude, af, weights, is_random=False):
