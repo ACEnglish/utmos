@@ -108,9 +108,9 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
         temp_name = next(tempfile._get_candidate_names())
         logging.debug('temp %s', temp_name)
         with h5py.File(temp_name, 'w') as hf:
-            hf.create_dataset('GT', data=gt_matrix[~variant_mask, :], compression="lzf", chunks=True, maxshape=(None, n_cols))
+            hf.create_dataset('GT', data=gt_matrix[~variant_mask, :][:], compression="lzf", chunks=True, maxshape=(None, n_cols))
             #hf.create_dataset('AF', data=cur_part["AF"], compression="lzf", chunks=True, maxshape=(None, 1))
-            hf.create_dataset('AF_matrix', data=af_matrix[~variant_mask, :], compression="lzf", chunks=True, maxshape=(None, n_cols))
+            hf.create_dataset('AF_matrix', data=af_matrix[~variant_mask, :][:], compression="lzf", chunks=True, maxshape=(None, n_cols))
         logging.debug('inbetween')
         new_fh = h5py.File(temp_name, 'r')
         gt_matrix = new_fh["GT"]
