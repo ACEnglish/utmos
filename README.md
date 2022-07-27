@@ -88,31 +88,59 @@ how many unseen variants contributed by the sample. Scores by default are varian
 `--weights` and/or `--af`
 
 ```
-utmos select [-h] [--lowmem] [-o OUT] [--concat CONCAT]
-             [-m {greedy,topN,random}] [-c COUNT] [--af] [--weights WEIGHTS]
-             [--subset SUBSET] [--include INCLUDE] [--exclude EXCLUDE]
-             [--debug]
-             in_files [in_files ...]
+utmos select [-h] [-c COUNT] [-o OUT] [--debug] [--af] [--weights WEIGHTS]
+              [--subset SUBSET] [--exclude EXCLUDE] [--lowmem LOWMEM]
+              [--buffer BUFFER] [--maxmem MAXMEM]
+              in_files [in_files ...]
 ```
 
-* `--count` sets how many samples are selected. Can be a count or a percent of samples if < 1 
-* `--af` will weigh the variants by their allele frequency, which helps reduce bias towards rare/private alleles.
-* `--weight` is a tab-delimited file of samples and a weight. Not every sample in the vcf needs to be given a 
-score in the weight file. Any sample without a provided weight is given a 1. 
-* `--include` and `--exclude` will force inclusion or exclusion of samples regardless of their score. These 
-parameters can take a comma-separated list of sample names (e.g. samp1,samp2) or can point to a file with one sample per-line. 
-* `--subset` will restrict analysis to only the specified samples before beginning any processing.
-* `in_files` are one or more input files and can be a mix of vcf[.gz] or jl files from `utmos convert`. 
-* `--mode` :
-  * greedy (default): On each iteration, pick the sample with highest score and remove its variants from future iterations
-  * topN: Sort samples by score, return the highest scoring samples
-  * random: Pick random samples
-* `--concat` lowers memory usage during concatenation of input files by writing each input into an hdf5 file. 
-  Without `--concat`, the entire dataset must be held in memory twice momentarily to do the concatenation (once 
-  with the pieces and once with the full dataset). The hdf5 file to which the input files are written can be 
-  reused directly in future `select` runs.
-* `--lowmem` lowers memory usage if the input file is a vcf[.gz] by converting directly into an hdf5 file. This is just
-  a hook in to `utmos convert --lowmem`
+### Basic arguments:
+#### in_files
+  one or more input files and can be a mix of vcf[.gz] or jl files from `utmos convert`. If there was a
+  previous run of `utmos select --lowmem example.hdf5`, the a single in_file of the hdf5 file can be specified. This
+  saves time by not needing to concatenate results between multiple runs of a dataset.
+
+#### count
+Sets how many samples are selected. Can be a count or a percent of samples if < 1.
+
+### Scoring arguments:
+#### af
+For each iteration, weigh the variants by their allele frequency. This helps reduce bias towards rare/private alleles.
+
+#### weight
+A tab-delimited file of samples and a weight. Not every sample in the vcf needs to be given a score in the weight file.
+Any sample without a provided weight is given a 1
+
+#### subset
+Provide a list of samples to analyze. 
+
+#### exclude
+Provie a list of samples to exclude from the analysis.
+
+### Memory arguments:
+These are arguments are for when there's more data than can be held in memory. By default, utmos will hold all variants 
+in memory. This comes out to approximately `(num_variants * num_samples * dtype_bytes * num_matrix) / 1e9` GB of memory. 
+`dtype_bytes` is the size per-datapoint in bytes (assumed to be 4) and `num_matrix` is 1 by default and 2 if `--af` is 
+also used. For datasets with too much data to hold in memory, utmos allows a user to take advantage of hdf5 files and 
+use disk storage instead of memory. However, this comes at the expense of needing to create a large intermediate file 
+and high IO on said file, thus one should expect an increased runtime.
+
+The `--lowmem` mode works by first concatenating all the input vcf/jl together into an hdf5 file. At most, `--buffer`
+rows will be held in-memory before writing/appending the data into the hdf5 file. Then, for each iteration, the dataset
+is reduced by removing the used sample's column and all variants the sample contained from the rows before writing the 
+reduced matrices to a temporary hdf5 in the `$TMPDIR`. If at any point through the iterations the dataset is estimated 
+to have a total size below `--maxmem`, the full dataset is pulled into memory before continuing.
+
+#### lowmem
+Name of the hdf5 file which is filled with the concatenated in_files.
+
+#### buffer
+Number of variants (rows) to buffer in memory during concatenation before writing to the hdf5 file.
+
+#### maxmem
+Maximum memory (in GB) available to utmos. For debugging, taking the 'shortcut' to pull the data into memory if/when
+possible can be skipped by setting `--maxmem 0`. However, when actually performing summation, utmos assumes at least 1GB
+of memory is available.
 
 ## Performace metrics
 Running on a 2013 Mac Pro and using chr22 from 1kgp genotype  

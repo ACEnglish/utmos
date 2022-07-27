@@ -169,35 +169,35 @@ assert_equal $(fn_md5 $OD/select_af_subset.txt) $(fn_md5 $ANSDIR/select_af_subse
 #                                 select lowmem
 #   I can shorten this later, but to start I want to test EVERYTHING
 # ------------------------------------------------------------
-run test_select_lm $ut select --lowmem $OD/tmp.hdf5 $INDIR/chunk2.vcf
+run test_select_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 $INDIR/chunk2.vcf
 assert_exit_code 0
 assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_first.txt)
 
-run test_select_intcnt_lm $ut select --lowmem $OD/tmp.hdf5 --count 10 $INDIR/chunk1.jl 
+run test_select_intcnt_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 --count 10 $INDIR/chunk1.jl 
 assert_exit_code 0
 assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_intcnt.txt)
 
-run test_select_floatcnt_lm $ut select --lowmem $OD/tmp.hdf5 --count 0.01 $INDIR/chunk2.jl 
+run test_select_floatcnt_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 --count 0.01 $INDIR/chunk2.jl 
 assert_exit_code 0
 assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_floatcnt.txt)
 
-run test_select_fileout_lm $ut select --lowmem $OD/tmp.hdf5 $INDIR/chunk1.vcf.gz -o $OD/select_fileout.txt
+run test_select_fileout_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 $INDIR/chunk1.vcf.gz -o $OD/select_fileout.txt
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_fileout.txt) $(fn_md5 $ANSDIR/select_fileout.txt)
 
-run test_select_multi_lm $ut select --lowmem $OD/tmp.hdf5 -o $OD/select_multi.txt $INDIR/chunk0.vcf.gz $INDIR/chunk2.vcf
+run test_select_multi_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -o $OD/select_multi.txt $INDIR/chunk0.vcf.gz $INDIR/chunk2.vcf
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_multi.txt) $(fn_md5 $ANSDIR/select_multi.txt)
 
-run test_select_multi2_lm $ut select --lowmem $OD/tmp.hdf5 -o $OD/select_multi2.txt $INDIR/chunk0.jl $INDIR/chunk2.jl
+run test_select_multi2_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -o $OD/select_multi2.txt $INDIR/chunk0.jl $INDIR/chunk2.jl
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_multi2.txt) $(fn_md5 $ANSDIR/select_multi.txt)
 
-run test_select_multimix_lm $ut select --lowmem $OD/tmp.hdf5 -o $OD/select_multimix.txt $INDIR/chunk0.vcf.gz $INDIR/chunk2.jl
+run test_select_multimix_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -o $OD/select_multimix.txt $INDIR/chunk0.vcf.gz $INDIR/chunk2.jl
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_multimix.txt) $(fn_md5 $ANSDIR/select_multi.txt)
 
-run test_select_exclude_lm $ut select --lowmem $OD/tmp.hdf5 -c 20 --exclude NA21117 $INDIR/chunk[01].jl -o $OD/select_exclude.txt
+run test_select_exclude_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -c 20 --exclude NA21117 $INDIR/chunk[01].jl -o $OD/select_exclude.txt
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_exclude.txt) $(fn_md5 $ANSDIR/select_exclude.txt)
 
@@ -205,15 +205,15 @@ assert_equal $(fn_md5 $OD/select_exclude.txt) $(fn_md5 $ANSDIR/select_exclude.tx
 #assert_exit_code 0
 #assert_equal $(fn_md5 $OD/select_include.txt) $(fn_md5 $ANSDIR/select_include.txt)
 
-run test_select_weights_lm $ut select --lowmem $OD/tmp.hdf5 -c 20 --weights $INDIR/weights.txt $INDIR/chunk0.jl -o $OD/select_weights.txt
+run test_select_weights_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -c 20 --weights $INDIR/weights.txt $INDIR/chunk0.jl -o $OD/select_weights.txt
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_weights.txt) $(fn_md5 $ANSDIR/select_weights.txt)
 
-run test_select_af_lm $ut select --lowmem $OD/tmp.hdf5 -c 20 --af -o $OD/select_af.txt $INDIR/chunk0.jl $INDIR/chunk1.jl
+run test_select_af_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -c 20 --af -o $OD/select_af.txt $INDIR/chunk0.jl $INDIR/chunk1.jl
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_af.txt) $(fn_md5 $ANSDIR/select_af.txt)
 
-run test_select_weightsaf_lm $ut select --lowmem $OD/tmp.hdf5 -c 5 --af --weights $INDIR/weights.txt \
+run test_select_weightsaf_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -c 5 --af --weights $INDIR/weights.txt \
     -o $OD/select_weightsaf.txt $INDIR/chunk0.jl $INDIR/chunk1.jl  
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_weightsaf.txt) $(fn_md5 $ANSDIR/select_weightsaf.txt)
@@ -228,18 +228,18 @@ assert_equal $(fn_md5 $OD/select_weightsaf.txt) $(fn_md5 $ANSDIR/select_weightsa
 #assert_exit_code 0
 #assert_equal $(fn_md5 $OD/select_exinfile.txt) $(fn_md5 $ANSDIR/select_exin.txt)
 
-run test_select_tiny_lm $ut select --lowmem $OD/tmp.hdf5 -c 20 $INDIR/chunk_tiny.vcf -o $OD/select_tiny.txt
+run test_select_tiny_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -c 20 $INDIR/chunk_tiny.vcf -o $OD/select_tiny.txt
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_tiny.txt) $(fn_md5 $ANSDIR/select_tiny.txt)
 
-run test_select_one_af_lm $ut select --lowmem $OD/tmp.hdf5 -c 0.005 --af -o $OD/select_one_af.txt $INDIR/chunk1.jl
+run test_select_one_af_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 -c 0.005 --af -o $OD/select_one_af.txt $INDIR/chunk1.jl
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_one_af.txt) $(fn_md5 $ANSDIR/select_one_af.txt)
 
-run test_select_badsamps_lm $ut select --lowmem $OD/tmp.hdf5 $INDIR/chunk_tiny.vcf $INDIR/chunk0.jl
+run test_select_badsamps_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 $INDIR/chunk_tiny.vcf $INDIR/chunk0.jl
 assert_exit_code 1
 
-run test_bad_filetype_lm $ut select --lowmem $OD/tmp.hdf5 doesntexist.txt 
+run test_bad_filetype_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 doesntexist.txt 
 assert_exit_code 1
 
 #run test_select_include_topN_lm $ut select --lowmem $OD/tmp.hdf5 --mode topN -c 5 --include HG00096 $INDIR/chunk[01].jl -o $OD/select_include_topN.txt
@@ -261,11 +261,11 @@ assert_exit_code 1
 #assert_exit_code 0
 #assert_equal $(fn_md5 $OD/select_include_subset.txt) $(fn_md5 $ANSDIR/select_include_subset.txt)
 
-run test_select_weights_subset_lm $ut select --lowmem $OD/tmp.hdf5 --subset $INDIR/subset.txt -c 5 --weights $INDIR/weights.txt $INDIR/chunk0.jl -o $OD/select_weights_subset.txt
+run test_select_weights_subset_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 --subset $INDIR/subset.txt -c 5 --weights $INDIR/weights.txt $INDIR/chunk0.jl -o $OD/select_weights_subset.txt
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_weights_subset.txt) $(fn_md5 $ANSDIR/select_weights_subset.txt)
 
-run test_select_af_subset_lm $ut select --lowmem $OD/tmp.hdf5 --subset $INDIR/subset.txt -c 5 --af  $INDIR/chunk0.jl -o $OD/select_af_subset.txt
+run test_select_af_subset_lm $ut select --maxmem 0 --lowmem $OD/tmp.hdf5 --subset $INDIR/subset.txt -c 5 --af  $INDIR/chunk0.jl -o $OD/select_af_subset.txt
 assert_exit_code 0
 assert_equal $(fn_md5 $OD/select_af_subset.txt) $(fn_md5 $ANSDIR/select_af_subset.txt)
 
