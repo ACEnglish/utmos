@@ -26,9 +26,10 @@ def do_summation(matrix, variant_mask, sample_mask):
 
     m_sum = np.zeros(matrix.shape[1])
     for i in matrix.iter_chunks():
-        cur_v_mask = variant_mask[i[0]]
+        #cur_v_mask = variant_mask[i[0]]
         cur_chunk = matrix[i]
-        m_sum[i[1]] += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask[i[1]]
+        #m_sum[i[1]] += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask[i[1]]
+        m_sum[i[1]] += cur_chunk.sum(axis=0) * sample_mask[i[1]]
     return m_sum
 
 def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights):
@@ -78,6 +79,7 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
 
     tot_captured = 0
     new_fh = None
+    prev_name = None
     for _ in range(select_count):
         cur_sample_count, sample_scores = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
                                                            sample_weights)
@@ -90,7 +92,7 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
         new_variant_count = cur_sample_count[use_sample]
         # don't want to use these variants anymore - this is anti-pattern to chunks
         logging.debug('updating variant mask') 
-        variant_mask = variant_mask | gt_matrix[:, use_sample]
+        variant_mask = gt_matrix[:, use_sample].astype(bool)
         # do this - up--front... ishg oa;wihef
         # or this sample
         sample_mask[use_sample] = False
@@ -107,17 +109,30 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
         # should remove previous temp
         temp_name = next(tempfile._get_candidate_names())
         logging.debug('temp %s', temp_name)
+        n_cols = sample_mask.sum()
+        c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
+        rows = (~variant_mask).sum()
         with h5py.File(temp_name, 'w') as hf:
-            hf.create_dataset('GT', data=gt_matrix[~variant_mask, :][:], compression="lzf", chunks=True, maxshape=(None, n_cols))
-            #hf.create_dataset('AF', data=cur_part["AF"], compression="lzf", chunks=True, maxshape=(None, 1))
-            hf.create_dataset('AF_matrix', data=af_matrix[~variant_mask, :][:], compression="lzf", chunks=True, maxshape=(None, n_cols))
-        logging.debug('inbetween')
+            dset = hf.create_dataset('GT', shape=((~variant_mask).sum(), n_cols), compression="lzf", dtype='bool', chunks=c_size)
+            m_tmp = gt_matrix[~variant_mask, :]
+            m_tmp = np.ascontiguousarray(m_tmp[:, sample_mask][:])
+            dset.write_direct(m_tmp)
+            dset = hf.create_dataset('AF_matrix', shape=((~variant_mask).sum(), n_cols), compression="lzf", dtype='float', chunks=c_size)
+            m_tmp = af_matrix[~variant_mask, :]
+            m_tmp = np.ascontiguousarray(m_tmp[:, sample_mask][:])
+            dset.write_direct(m_tmp)
+        if prev_name is not None:
+            logging.debug("removing %s", prev_name)
+            os.remove(prev_name)
+        prev_name = temp_name
+        logging.debug('reloading')
         new_fh = h5py.File(temp_name, 'r')
         gt_matrix = new_fh["GT"]
         af_matrix = new_fh["AF_matrix"]
         new_shape = gt_matrix.shape
+        sample_mask = np.ones(n_cols, dtype='bool')
         logging.debug("shape %s -> %s", pre_shape, new_shape)
-        variant_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
+        #variant_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
 
         yield [vcf_samples[use_sample], int(variant_count), int(new_variant_count),
                int(tot_captured), round(tot_captured / num_vars, 4)]
