@@ -81,6 +81,7 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
     new_fh = None
     prev_name = None
     for _ in range(select_count):
+        vcf_samples = vcf_samples[sample_mask]
         cur_sample_count, sample_scores = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
                                                            sample_weights)
 
