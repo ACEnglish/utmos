@@ -171,7 +171,6 @@ def under_max_mem_usage(shape, with_af=False):
     """
     return (shape[0] * shape[1] * 4 * (int(with_af) + 1)) / 1e9 < MAXMEM
 
-# pylint:disable=too-many-locals
 def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix=None,
                   sample_weights=None):
     """
@@ -524,7 +523,7 @@ def select_main(cmdargs):
     """
     Main
     """
-    global MAXMEM
+    global MAXMEM # pylint: disable=global-statement
     args = parse_args(cmdargs)
 
     data = load_files(args.in_files, args.lowmem, args.buffer)
