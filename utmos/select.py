@@ -382,6 +382,9 @@ def load_files(in_files, lowmem=None, buffer=32768):
     """
     file_cnt = len(in_files)
     logging.info(f"Loading {file_cnt} files")
+    if lowmem == 1:
+        return h5py.File(in_files[0], 'r')
+
     samples = None
     gt_parts = []
     af_parts = []
@@ -396,15 +399,8 @@ def load_files(in_files, lowmem=None, buffer=32768):
             dat = read_vcf(i, lowmem is not None)
         elif i.endswith(".jl"):
             dat = joblib.load(i)
-        elif i.endswith(".hdf5"):
-            if len(in_files) > 1:
-                logging.error("Only one hdf5 file at a time!")
-                sys.exit(1)
-            logging.info("Loading single hdf5")
-            lowmem = i
-            break
         else:
-            logging.error("Unknown filetype %s. Expected `.vcf[.gz]`, `.jl`, or `.hdf5`", i)
+            logging.error("Unknown filetype %s. Expected `.vcf[.gz]`, `.jl`", i)
             sys.exit(1)
 
         if samples is None:
@@ -487,7 +483,7 @@ def parse_args(args):
     """
     parser = argparse.ArgumentParser(prog="select", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("in_files", nargs="+", type=str,
+    parser.add_argument("in_files", nargs="*", type=str,
                         help="Input VCF or jl files")
     parser.add_argument("-c", "--count", type=float, default=0.02,
                         help="Number of samples to select as a percent if <1 or count if >=1 (%(default)s)")
@@ -516,6 +512,22 @@ def parse_args(args):
 
     args = parser.parse_args(args)
     truvari.setup_logging(args.debug)
+    # Pre-fight inputs check
+    if [_ for _ in args.in_files if _.endswith(".hdf5")] and len(args.in_files) > 1:
+        logging.error("Cannot provide hdf5 with multiple input files")
+        sys.exit(1)
+
+    if len(args.in_files) == 0:
+        if not args.lowmem:
+            logging.error("No input files provided")
+            sys.exit(1)
+        args.in_files = [args.lowmem]
+        args.lowmem = 1
+
+    if len(args.in_files) == 1 and args.in_files[0].endswith(".hdf5") and not args.lowmem:
+        logging.info("Switching on lowmem for hdf5 input")
+        args.lowmem = 1
+
     return args
 
 
@@ -525,7 +537,7 @@ def select_main(cmdargs):
     """
     global MAXMEM # pylint: disable=global-statement
     args = parse_args(cmdargs)
-
+    
     data = load_files(args.in_files, args.lowmem, args.buffer)
     args.subset = parse_sample_lists(args.subset)
     #args.include = parse_sample_lists(args.include)

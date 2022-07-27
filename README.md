@@ -142,6 +142,11 @@ Maximum memory (in GB) available to utmos. For debugging, taking the 'shortcut' 
 possible can be skipped by setting `--maxmem 0`. However, when actually performing summation, utmos assumes at least 1GB
 of memory is available.
 
+## Reusing the `--lowmem file.hdf5` with `select`
+If you have a previous run in which you used `--lowmem` to make an  hdf5 file, you can reuse that file and save
+the concatenation/conversion work. Simply provide a single `in_file of `file.hdf5` or provide no `in_files` with the
+parameter `--lowmem file.hdf5`
+
 ## Performace metrics
 Running on a 2013 Mac Pro and using chr22 from 1kgp genotype  
 `ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502//ALL.chr22.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz`
