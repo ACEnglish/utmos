@@ -22,15 +22,7 @@ def do_summation(matrix, variant_mask, sample_mask):
     if the matrix is an h5py.File, we'll operate in chunks
     otherwise, it is all in memory and simple to do
     """
-    if not isinstance(matrix, h5py.Dataset):
-        return matrix[~variant_mask].sum(axis=0) * sample_mask
-
-    m_sum = np.zeros(matrix.shape[1])
-    for i in matrix.iter_chunks():
-        cur_v_mask = variant_mask[i[0]]
-        cur_chunk = matrix[i]
-        m_sum[i[1]] += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask[i[1]]
-    return m_sum
+    return matrix[~variant_mask].sum(axis=0) * sample_mask
 
 def do_lowmem_summation(matrix, variant_mask, sample_mask): #pylint:disable=unused-argument
     """
@@ -47,7 +39,7 @@ def do_lowmem_summation(matrix, variant_mask, sample_mask): #pylint:disable=unus
     one_row_size = n_cols * 4 / 1e9
     per_chunk_size = one_row_size * c_size[0]
 
-    max_row_cnt = max(1, max(1, MAXMEM) / one_row_size)
+    max_row_cnt = max(1, max(1, MAXMEM) / per_chunk_size * c_size[0])
     if max_row_cnt < c_size[0]:
         max_row_cnt = c_size[0]
     # round to nearest chunk boundary
@@ -105,10 +97,7 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
     num_vars = gt_matrix.shape[0]
     # Only need to calculate this once
     logging.debug("getting total_variant_count")
-    if isinstance(gt_matrix, h5py.Dataset):
-        total_variant_count = do_summation(gt_matrix, variant_mask, sample_mask)
-    else:
-        total_variant_count = gt_matrix.sum(axis=0)
+    total_variant_count = gt_matrix.sum(axis=0)
 
     tot_captured = 0
     for _ in range(select_count):
@@ -187,19 +176,13 @@ def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample
 
     Expects input matrices to be h5py Datasets. Will Do an iterative rewrite
     """
-    if not isinstance(gt_matrix, h5py.Dataset):
-        logging.error("Can only run greedy_mem on h5df")
-        sys.exit(1)
     logging.debug("running greedy_mem mode")
 
     num_vars = gt_matrix.shape[0]
 
     # Only need to calculate this once
     logging.debug("getting total_variant_count")
-    if isinstance(gt_matrix, h5py.Dataset):
-        total_variant_count = do_lowmem_summation(gt_matrix, variant_mask, sample_mask)
-    else:
-        total_variant_count = gt_matrix.sum(axis=0)
+    total_variant_count = do_lowmem_summation(gt_matrix, variant_mask, sample_mask)
 
     logging.debug("per-sample variant mean %.1f", total_variant_count.mean())
 
@@ -343,7 +326,7 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     Handle the hdf5 file
     """
     # Future - make af_matrix optional
-    logging.debug('calc af')
+    logging.debug('calc af_matrix')
 
     #logging.debug("sorting by AF") (doesn't make sense with greedy_mem not slicing as much anymore)
     #m_order = cur_part["AF"].argsort(axis=0)
