@@ -15,7 +15,7 @@ import pandas as pd
 
 from utmos.convert import read_vcf
 
-def do_summation(matrix, variant_mask, sample_mask, chunk_length=32768):
+def do_summation(matrix, variant_mask, sample_mask):
     """
     Sum the matrix along axis=0
     if the matrix is an h5py.File, we'll operate in chunks
@@ -31,33 +31,30 @@ def do_summation(matrix, variant_mask, sample_mask, chunk_length=32768):
         m_sum[i[1]] += cur_chunk[~cur_v_mask].sum(axis=0) * sample_mask[i[1]]
     return m_sum
 
-def do_no_mask_summation(matrix, variant_mask, sample_mask):
+def do_no_mask_summation(matrix, *args): #pylint:disable=unused-argument
     """
     Sum the matrix along axis=0
     if the matrix is an h5py.File, we'll operate in chunks
     otherwise, it is all in memory and simple to do
     """
-    if not isinstance(matrix, h5py.Dataset):
-        return matrix[~variant_mask].sum(axis=0) * sample_mask
-
     m_sum = np.zeros(matrix.shape[1])
     for i in matrix.iter_chunks():
-        cur_chunk = matrix[i]
-        m_sum[i[1]] += cur_chunk.sum(axis=0) * sample_mask[i[1]]
+        m_sum[i[1]] += matrix[i].sum(axis=0)
     return m_sum
 
 
-def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights):
+def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights, summer=do_summation):
     """
     return number of variants and the scores per-sample for this iteration
+    summer is the method to do the summation (experimental)
     """
     logging.debug("gt_matrix sum")
-    cur_sample_count = do_summation(gt_matrix, variant_mask, sample_mask)
+    cur_sample_count = summer(gt_matrix, variant_mask, sample_mask)
 
     sample_scores = cur_sample_count
     if af_matrix is not None:
         logging.debug("af_matrix sum")
-        sample_scores = do_summation(af_matrix, variant_mask, sample_mask)
+        sample_scores = summer(af_matrix, variant_mask, sample_mask)
     elif sample_weights is not None:
         sample_scores = cur_sample_count.copy()
     if sample_weights is not None:
@@ -66,7 +63,7 @@ def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_wei
     return cur_sample_count, sample_scores
 
 def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix=None,
-                  sample_weights=None, chunk_length=32768):
+                  sample_weights=None):
     """
     Greedy calculation
     yields rows of each selected sample's information
@@ -82,9 +79,7 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
     # Only need to calculate this once
     logging.debug("getting total_variant_count")
     if isinstance(gt_matrix, h5py.Dataset):
-        t_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
-        s_mask = np.ones(gt_matrix.shape[0], dtype='bool')
-        total_variant_count = do_summation(gt_matrix, variant_mask, sample_mask, chunk_length)
+        total_variant_count = do_summation(gt_matrix, variant_mask, sample_mask)
     else:
         total_variant_count = gt_matrix.sum(axis=0)
 
@@ -121,7 +116,6 @@ def rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_n
     logging.debug('rewriting to %s', temp_name)
     n_cols = sample_mask.sum()
     c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
-    rows = (~variant_mask).sum()
     with h5py.File(temp_name, 'w') as hf:
         dset = hf.create_dataset('GT', shape=((~variant_mask).sum(), n_cols), compression="lzf", dtype='bool', chunks=c_size)
         m_tmp = gt_matrix[~variant_mask, :]
@@ -138,7 +132,7 @@ def rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_n
     af_matrix = new_fh["AF_matrix"]
     return gt_matrix, af_matrix
 
-
+# pylint:disable=too-many-locals
 def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix=None,
                   sample_weights=None):
     """
@@ -160,7 +154,7 @@ def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample
     # Only need to calculate this once
     logging.debug("getting total_variant_count")
     if isinstance(gt_matrix, h5py.Dataset):
-        total_variant_count = do_summation(gt_matrix, variant_mask, sample_mask)
+        total_variant_count = do_no_mask_summation(gt_matrix, variant_mask, sample_mask)
     else:
         total_variant_count = gt_matrix.sum(axis=0)
 
@@ -170,7 +164,7 @@ def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample
     prev_tmp_name = None
     for _ in range(select_count):
         cur_sample_count, sample_scores = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
-                                                           sample_weights)
+                                                           sample_weights, do_no_mask_summation)
 
         # use highest score
         use_sample = np.argmax(sample_scores)
@@ -186,28 +180,28 @@ def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample
         # stop running if we're out of new variants
         if new_variant_count == 0:
             logging.warning("Ran out of new variants")
-            break
+            return
 
         # Poorly designed flow control
         if not isinstance(gt_matrix, h5py.Dataset):
-            variant_mask = variant_mask | gt_matrix[:, use_sample].astype(bool) 
+            variant_mask = variant_mask | gt_matrix[:, use_sample].astype(bool)
             logging.debug('early yield')
             yield [use_sample_name, int(variant_count), int(new_variant_count),
                int(tot_captured), round(tot_captured / num_vars, 4)]
             continue
 
-        variant_mask = gt_matrix[:, use_sample].astype(bool) 
-          
+        variant_mask = gt_matrix[:, use_sample].astype(bool)
+
         ## Re-writing
         logging.debug('rewriting')
         pre_shape = gt_matrix.shape
         # Need to put this somewhere
-        temp_name = next(tempfile._get_candidate_names()) + '.utmos.tmp.hdf5'
+        temp_name = next(tempfile._get_candidate_names()) + '.utmos.tmp.hdf5' # pylint:disable=protected-access, stop-iteration-return
 
         # if lowmem or isHDF5..?
         gt_matrix, af_matrix = rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name)
         new_shape = gt_matrix.shape
-        
+
         # clean tmp files
         if prev_tmp_name is not None:
             logging.debug("removing %s", prev_tmp_name)
@@ -261,7 +255,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
         logging.info(f"Excluding {len(exclude)} samples")
         sample_mask = sample_mask & ~np.isin(vcf_samples, exclude)
     logging.debug(f"ending with {sample_mask.sum()} samples")
-       
+
     sample_weights = None
     if weights is not None:
         logging.info("Setting %d weights", len(weights))
@@ -288,26 +282,17 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     return m_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix,
                     sample_weights)
 
-def samp_same(a, b):
-    """
-    Make sure samples are identical
-    return true if they're identical
-    """
-    return True
-    # still broken
-    #return len(a) == len(b) and np.equal(a, b).all()
-
 def write_append_hdf5(cur_part, out_name, is_first=False):
     """
     Handle the hdf5 file
     """
     # Future - make af_matrix optional
     logging.debug('calc af')
-        
-    logging.debug("sorting by AF")
-    m_order = cur_part["AF"].argsort(axis=0)[should_filter, 0]
-    cur_part["GT"] = cur_part["GT"][m_order]
-    cur_part["AF"] = cur_part["AF"][m_order]
+
+    #logging.debug("sorting by AF") (doesn't make sense with greedy_mem not slicing as much anymore)
+    #m_order = cur_part["AF"].argsort(axis=0)
+    #cur_part["GT"] = cur_part["GT"][m_order]
+    #cur_part["AF"] = cur_part["AF"][m_order]
 
     af_matrix = cur_part["GT"] * cur_part["AF"]
     af_matrix[np.isnan(af_matrix)] = 0
@@ -330,6 +315,7 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
         hf["AF_matrix"][-af_matrix.shape[0]:] = af_matrix
 
 
+#pylint:disable=too-many-statements
 def load_files(in_files, lowmem=None, chunk_length=32768):
     """
     Load and concatenate multiple files
@@ -367,9 +353,6 @@ def load_files(in_files, lowmem=None, chunk_length=32768):
 
         if samples is None:
             samples = dat['samples'].astype('S')
-        elif not samp_same(samples, dat['samples'].astype('S')):
-            logging.critical(f"Different samples in {i}")
-            sys.exit(1)
 
         upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples'])).astype(bool)
         uninf_filter = upack.any(axis=1)
@@ -393,7 +376,7 @@ def load_files(in_files, lowmem=None, chunk_length=32768):
                 cur_chunk = {'GT':gt_parts[0],
                              'samples':samples,
                              'AF': af_parts[0]}
-            
+
             write_append_hdf5(cur_chunk, lowmem, is_first)
             # reset buffering
             load_buffer_count = 0
