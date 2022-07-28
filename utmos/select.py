@@ -16,18 +16,14 @@ import pandas as pd
 from utmos.convert import read_vcf
 MAXMEM=2 # in GB
 
-def do_summation(matrix, variant_mask, sample_mask):
-    """
-    Sum the matrix along axis=0
-    if the matrix is an h5py.File, we'll operate in chunks
-    otherwise, it is all in memory and simple to do
-    """
-    return matrix[~variant_mask].sum(axis=0) * sample_mask
 
-def mem_aware_hdf5_iter(matrix, max_mem):
+#############
+# Core code #
+#############
+def hdf5_mem_iter(matrix, max_mem):
     """
     Will read hdf5 in slices that fit into max_mem
-    with_slice = True will yield the chunk as well as the chunk's row slice
+    yields the chunk as numpy array in memory and the slice object for the chunk
     """
     c_size = matrix.chunks
     logging.debug("csize is %s for shape of %s", c_size, matrix.shape)
@@ -41,6 +37,7 @@ def mem_aware_hdf5_iter(matrix, max_mem):
     max_row_cnt = max(1, max_chunk_count * c_size[0])
     if max_row_cnt < c_size[0]:
         max_row_cnt = c_size[0]
+
     # round to nearest chunk boundary
     partition = max_row_cnt % c_size[0]
     if partition == 0:
@@ -50,6 +47,7 @@ def mem_aware_hdf5_iter(matrix, max_mem):
         max_row_cnt += c_size[0] - partition
     else:
         max_row_cnt -= partition
+
     max_row_cnt = min(int(max_row_cnt), n_rows)
     for row_start in range(0, n_rows, max_row_cnt):
         m_slice = slice(row_start, row_start + max_row_cnt, 1)
@@ -59,22 +57,37 @@ def mem_aware_hdf5_iter(matrix, max_mem):
         yield matrix[m_slice, :][:], m_slice
 
 
-def do_lowmem_summation(matrix, variant_mask, sample_mask): #pylint:disable=unused-argument
+def do_inmem_sum(matrix, variant_mask, sample_mask):
+    """
+    Sum the matrix along axis=0
+    if the matrix is an h5py.File, we'll operate in chunks
+    otherwise, it is all in memory and simple to do
+    """
+    return matrix[~variant_mask].sum(axis=0) * sample_mask
+
+
+def do_lowmem_sum(matrix, variant_mask, sample_mask): #pylint:disable=unused-argument
     """
     Sum the matrix along axis=0
     if the matrix is an h5py.File, we'll operate in chunks
     otherwise, it is all in memory and simple to do
     """
     m_sum = np.zeros(matrix.shape[1])
-    for chunk, _ in mem_aware_hdf5_iter(matrix, MAXMEM):
+    for chunk, _ in hdf5_mem_iter(matrix, MAXMEM):
         m_sum += chunk.sum(axis=0)
     m_sum *= sample_mask
     return m_sum
 
-def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights, summer=do_summation):
+
+def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights, summer=do_inmem_sum):
     """
-    return number of variants and the scores per-sample for this iteration
-    summer is the method to do the summation (experimental)
+    calculate the best scoring sample,
+    summer is the method to do the summation since hdf5 needs to be treated different from numpy
+
+    updates sample_mask and variant_mask in place
+    returns tuple of:
+        column index of the highest score,
+        new_row_count for highest score column index
     """
     logging.debug("gt_matrix sum")
     cur_sample_count = summer(gt_matrix, variant_mask, sample_mask)
@@ -88,57 +101,22 @@ def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_wei
     if sample_weights is not None:
         logging.debug("applying weights")
         sample_scores = sample_scores * sample_weights
-    return cur_sample_count, sample_scores
 
-def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix=None,
-                  sample_weights=None):
-    """
-    Greedy calculation
-    yields rows of each selected sample's information
-    gt_matrix = boolean matrix of genotype presence
-    select_count = how many samples we'll be selecting
-    vcf_samples = identifiers of sample names (len == gt_matrix.shape[1])
-    variant_mask = boolean matrix of variants where True == used
-    sample_mask = boolean matrix of samples where True == use
-    af_matrix = (optional) the af_matrix scores (af_matrix.shape == gt_matrix.shape)
-    sample_weights = (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
-    """
-    num_vars = gt_matrix.shape[0]
-    # Only need to calculate this once
-    logging.debug("getting total_variant_count")
-    total_variant_count = gt_matrix.sum(axis=0)
+    use_sample = np.argmax(sample_scores)
+    new_variant_count = cur_sample_count[use_sample]
 
-    tot_captured = 0
-    for _ in range(select_count):
-        cur_sample_count, sample_scores = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
-                                                           sample_weights)
+    sample_mask[use_sample] = False
+    variant_mask |= gt_matrix[:, use_sample]
 
-        # use highest score
-        use_sample = np.argmax(sample_scores)
-        # how many does this sample have overall?
-        variant_count = total_variant_count[use_sample]
-        # number of new variants added
-        new_variant_count = cur_sample_count[use_sample]
-        # don't want to use these variants anymore
-        variant_mask = variant_mask | gt_matrix[:, use_sample]
-        # or this sample
-        sample_mask[use_sample] = False
-        # update running total number of variants
-        tot_captured += new_variant_count
-        # stop running if we're out of new variants
-        if new_variant_count == 0:
-            logging.warning("Ran out of new variants")
-            break
+    return use_sample, new_variant_count
 
-        yield [vcf_samples[use_sample], int(variant_count), int(new_variant_count),
-               int(tot_captured), round(tot_captured / num_vars, 4)]
 
-def do_slicing_write(matrix, row_mask, col_mask, out):
+def hdf5_sliced_copy(matrix, row_mask, col_mask, out):
     """
     Write masked matrix to out Dataset dset.write_direct
     """
     out_start_pos = 0
-    for chunk, m_slice in mem_aware_hdf5_iter(matrix, MAXMEM):
+    for chunk, m_slice in hdf5_mem_iter(matrix, MAXMEM):
         out_end_pos = out_start_pos + row_mask[m_slice].sum()
         out[out_start_pos:out_end_pos] = chunk[row_mask[m_slice]][:, col_mask]
         #might be faster ?, but increases the amount of memory for copy(?)
@@ -147,11 +125,11 @@ def do_slicing_write(matrix, row_mask, col_mask, out):
         #out.write_direct(chunk, dest_sel=np.r_[out_start_pos:out_end_pos, :])
         out_start_pos = out_end_pos
 
-def rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name):
+
+def reduce_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name):
     """
-    Attempting to update gt_matrix and af_matrix by pulling all the data into a smaller dataframe
+    Update the gt_matrix and af_matrix by pulling used data into a smaller dataframe
     """
-    # should remove previous temp
     logging.debug('rewriting to %s', temp_name)
     n_rows = (~variant_mask).sum()
     n_cols = sample_mask.sum()
@@ -159,15 +137,14 @@ def rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_n
     c_rows = min(n_rows, max(1, int(1e6 / 4 / n_cols)))
     c_size = (c_rows, n_cols)
     if 0 in c_size:
-        logging.debug("finished? %s", c_size)
         return None, None
 
     with h5py.File(temp_name, 'w') as hf:
         dset_g = hf.create_dataset('GT', shape=(n_rows, n_cols), compression="lzf", dtype='bool', chunks=c_size)
-        do_slicing_write(gt_matrix, ~variant_mask, sample_mask, dset_g)
+        hdf5_sliced_copy(gt_matrix, ~variant_mask, sample_mask, dset_g)
         if af_matrix:
             dset_a = hf.create_dataset('AF_matrix', shape=(n_rows, n_cols), compression="lzf", dtype='float32', chunks=c_size)
-            do_slicing_write(af_matrix, ~variant_mask, sample_mask, dset_a)
+            hdf5_sliced_copy(af_matrix, ~variant_mask, sample_mask, dset_a)
 
     logging.debug('reloading')
     new_fh = h5py.File(temp_name, 'r')
@@ -175,12 +152,18 @@ def rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_n
     af_matrix = new_fh["AF_matrix"] if af_matrix else None
     return gt_matrix, af_matrix
 
-def under_max_mem_usage(shape, with_af=False):
+
+def is_memsafe(shape, with_af=False):
     """
     Simple memory usage estimate in GB
+    returns true if we think we can hold a matrix of shape in memory
     """
     return (shape[0] * shape[1] * 4 * (int(with_af) + 1)) / 1e9 < MAXMEM
 
+
+##############
+# Algorithms #
+##############
 def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix=None,
                   sample_weights=None):
     """
@@ -198,33 +181,21 @@ def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample
     Expects input matrices to be h5py Datasets. Will Do an iterative rewrite
     """
     logging.debug("running greedy_mem mode")
-
     num_vars = gt_matrix.shape[0]
 
-    # Only need to calculate this once
     logging.debug("getting total_variant_count")
-    total_variant_count = do_lowmem_summation(gt_matrix, variant_mask, sample_mask)
-
-    logging.debug("per-sample variant mean %.1f", total_variant_count.mean())
+    total_variant_count = do_lowmem_sum(gt_matrix, variant_mask, sample_mask)
 
     tot_captured = 0
     prev_tmp_name = None
     for _ in range(select_count):
-        cur_sample_count, sample_scores = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
-                                                           sample_weights, do_lowmem_summation)
+        use_sample, new_variant_count = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
+                                                         sample_weights, do_lowmem_sum)
 
-        # use highest score
-        use_sample = np.argmax(sample_scores)
         use_sample_name = vcf_samples[use_sample]
-        # how many does this sample have overall?
         variant_count = total_variant_count[use_sample]
-        # number of new variants added
-        new_variant_count = cur_sample_count[use_sample]
-        # don't want to use these variants anymore - this is anti-pattern to chunks
-        sample_mask[use_sample] = False
-        # update running total number of variants
         tot_captured += new_variant_count
-        # stop running if we're out of new variants
+
         if new_variant_count == 0:
             logging.warning("Ran out of new variants")
             return
@@ -235,14 +206,11 @@ def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample
         if sample_weights is not None:
             sample_weights = sample_weights[sample_mask]
 
-        variant_mask = gt_matrix[:, use_sample].astype(bool)
-
-        ## Re-writing
+        ## Re-writing to reduce
         pre_shape = gt_matrix.shape
         temp_name = os.path.join(tempfile.gettempdir(),
                                  next(tempfile._get_candidate_names()) + '.utmos.tmp.hdf5') # pylint:disable=protected-access, stop-iteration-return
-
-        gt_matrix, af_matrix = rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name)
+        gt_matrix, af_matrix = reduce_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name)
 
         # clean tmp files
         if prev_tmp_name is not None:
@@ -252,24 +220,59 @@ def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample
 
         yield [use_sample_name, int(variant_count), int(new_variant_count),
                int(tot_captured), round(tot_captured / num_vars, 4)]
+
         if not gt_matrix: # Ran out of data
             return
 
         logging.debug("shape %s -> %s", pre_shape, gt_matrix.shape)
 
-        # Hacky
+        # masks have to be reset for 'fresh' matrix
         sample_mask = np.ones(gt_matrix.shape[1], dtype='bool')
+        variant_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
 
-        # Stop doing hdf5 rewrites when we can
-        if isinstance(gt_matrix, h5py.Dataset) and under_max_mem_usage(gt_matrix.shape, af_matrix is not None):
+        # Stop doing hdf5 rewrites
+        if isinstance(gt_matrix, h5py.Dataset) and is_memsafe(gt_matrix.shape, af_matrix is not None):
             logging.info("Dataset small enough to hold in memory")
             gt_matrix = gt_matrix[:]
             af_matrix = af_matrix[:] if af_matrix else af_matrix
-            variant_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
             for i in greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix,
                                    sample_weights):
                 yield i
             return
+
+    # End greedy_mem
+
+
+def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix=None,
+                  sample_weights=None):
+    """
+    Greedy calculation
+    yields rows of each selected sample's information
+    gt_matrix = boolean matrix of genotype presence
+    select_count = how many samples we'll be selecting
+    vcf_samples = identifiers of sample names (len == gt_matrix.shape[1])
+    variant_mask = boolean matrix of variants where True == used
+    sample_mask = boolean matrix of samples where True == use
+    af_matrix = (optional) the af_matrix scores (af_matrix.shape == gt_matrix.shape)
+    sample_weights = (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
+    """
+    num_vars = gt_matrix.shape[0]
+    logging.debug("getting total_variant_count")
+    total_variant_count = gt_matrix.sum(axis=0)
+
+    tot_captured = 0
+    for _ in range(select_count):
+        use_sample, new_variant_count = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
+                                                         sample_weights)
+
+        variant_count = total_variant_count[use_sample]
+        tot_captured += new_variant_count
+        if new_variant_count == 0:
+            logging.warning("Ran out of new variants")
+            break
+
+        yield [vcf_samples[use_sample], int(variant_count), int(new_variant_count),
+               int(tot_captured), round(tot_captured / num_vars, 4)]
 
 
 SELECTORS = {"greedy": greedy_select,
@@ -278,8 +281,11 @@ SELECTORS = {"greedy": greedy_select,
              #"topN": topN_select,
              #"random": random_select}
 
-def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=None, af=False,
-                  weights=None):
+
+####################
+# Setup/Management #
+####################
+def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=None, weights=None):
     """
     Setup the selection calculation
     if select_count [0,1], select that percent of samples
@@ -293,14 +299,14 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     select_count = max(1, int(num_samples * select_count) if select_count < 1 else int(select_count))
     logging.info("Selecting %d samples", select_count)
 
-    # Build masks
-    variant_mask = np.zeros(num_vars, dtype='bool')
-
     vcf_samples = data['samples']
     if isinstance(data, h5py.File):
         vcf_samples = data['samples'][:].astype(str)
     else:
         vcf_samples = vcf_samples.astype(str)
+
+    # Build masks
+    variant_mask = np.zeros(num_vars, dtype='bool')
     sample_mask = np.ones(num_samples, dtype='bool')
 
     if subset:
@@ -308,7 +314,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
         logging.info("Subsetting to %d of %d samples", sample_mask.sum(), num_samples)
     if exclude:
         logging.info(f"Excluding {len(exclude)} samples")
-        sample_mask = sample_mask & ~np.isin(vcf_samples, exclude)
+        sample_mask &= ~np.isin(vcf_samples, exclude)
     logging.debug(f"ending with {sample_mask.sum()} samples")
 
     sample_weights = None
@@ -320,21 +326,10 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
                 sample_weights[pos] = weights.loc[i]
 
     gt_matrix = data['GT']
-    af_matrix = None
-    if af and isinstance(data, h5py.File):
-        af_matrix = data["AF_matrix"]
-    elif af:
-        logging.info("Calculating AF matrix")
-        af_matrix = gt_matrix * data['AF']
-        af_matrix[np.isnan(af_matrix)] = 0
-
-    #if logging.root.level <= logging.DEBUG:
-    #    logging.debug("pre-flight variant check")
-    #    cnt = gt_matrix[:,sample_mask].any(axis=1).sum()
-    #    logging.debug("have %d variants to process", cnt)
+    af_matrix = data["AF_matrix"] if 'AF_matrix' in data and data["AF_matrix"] is not None else None
 
     m_select = SELECTORS[mode]
-    if isinstance(data, h5py.File) and under_max_mem_usage(gt_matrix.shape, af_matrix is not None):
+    if isinstance(data, h5py.File) and is_memsafe(gt_matrix.shape, af_matrix is not None):
         logging.info("Dataset small enough to hold in memory")
         gt_matrix = gt_matrix[:]
         af_matrix = af_matrix[:] if af_matrix else af_matrix
@@ -343,7 +338,8 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     return m_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix,
                     sample_weights)
 
-def write_append_hdf5(cur_part, out_name, is_first=False):
+
+def write_append_hdf5(cur_part, out_name, is_first=False, calc_af=False):
     """
     Handle the hdf5 file
     """
@@ -353,28 +349,34 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     #cur_part["AF"] = cur_part["AF"][m_order]
 
     # Future - make af_matrix optional
-    logging.debug('calc af_matrix')
-    af_matrix = cur_part["GT"] * cur_part["AF"]
-    af_matrix[np.isnan(af_matrix)] = 0
+    if calc_af:
+        logging.debug('calc af_matrix')
+        af_matrix = cur_part["GT"] * cur_part["AF"]
+        af_matrix[np.isnan(af_matrix)] = 0
+    else:
+        af_matrix = None
+
     n_cols = cur_part['GT'].shape[1]
     c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
+
     if is_first:
         with h5py.File(out_name, 'w') as hf:
-            hf.create_dataset('GT', data=cur_part["GT"], compression="lzf", dtype='bool', chunks=c_size, maxshape=(None, n_cols))
-            hf.create_dataset('AF_matrix', data=af_matrix, compression="lzf", dtype='float32', chunks=c_size, maxshape=(None, n_cols))
             hf.create_dataset('samples', data=cur_part["samples"], compression="lzf", chunks=True, maxshape=(None,))
+            hf.create_dataset('GT', data=cur_part["GT"], compression="lzf", dtype='bool', chunks=c_size, maxshape=(None, n_cols))
+            if calc_af:
+                hf.create_dataset('AF_matrix', data=af_matrix, compression="lzf", dtype='float32', chunks=c_size, maxshape=(None, n_cols))
         return
 
     with h5py.File(out_name, 'a') as hf:
         logging.debug('append')
         hf["GT"].resize((hf["GT"].shape[0] + cur_part["GT"].shape[0]), axis = 0)
         hf["GT"][-cur_part["GT"].shape[0]:] = cur_part["GT"]
+        if calc_af:
+            hf["AF_matrix"].resize((hf["AF_matrix"].shape[0] + af_matrix.shape[0]), axis = 0)
+            hf["AF_matrix"][-af_matrix.shape[0]:] = af_matrix
 
-        hf["AF_matrix"].resize((hf["AF_matrix"].shape[0] + af_matrix.shape[0]), axis = 0)
-        hf["AF_matrix"][-af_matrix.shape[0]:] = af_matrix
 
-
-def load_files(in_files, lowmem=None, buffer=32768):
+def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
     """
     Load and concatenate multiple files
     if lowmem is provided, in_files are concatenated into an hdf5. This may be a little slower,
@@ -382,8 +384,7 @@ def load_files(in_files, lowmem=None, buffer=32768):
     data in memory during the concatenation step.
     If the af_matrix is going to be used, lowmem will also create that per-in_file and write it to the hdf5 file
     """
-    file_cnt = len(in_files)
-    logging.info(f"Loading {file_cnt} files")
+    logging.info(f"Loading {len(in_files)} files")
     if lowmem == 1:
         return h5py.File(in_files[0], 'r')
 
@@ -391,12 +392,11 @@ def load_files(in_files, lowmem=None, buffer=32768):
     gt_parts = []
     af_parts = []
 
-    load_count = 0
     load_row_count = 0
     load_buffer_count = 0
 
     is_first = True
-    for pos, i in enumerate(in_files):
+    for load_count, i in enumerate(in_files):
         if i.endswith((".vcf.gz", ".vcf")):
             dat = read_vcf(i, lowmem is not None)
         elif i.endswith(".jl"):
@@ -414,12 +414,12 @@ def load_files(in_files, lowmem=None, buffer=32768):
 
         gt_parts.append(upack[uninf_filter])
         af_parts.append(dat['AF'][uninf_filter])
-        m_count = dat["GT"].shape[0]
 
-        load_count += 1
+        # lowmem buffering
+        m_count = dat["GT"].shape[0]
         load_row_count += m_count
         load_buffer_count += m_count
-        if lowmem is not None and (load_buffer_count >= buffer or pos == len(in_files) - 1):
+        if lowmem is not None and (load_buffer_count >= buffer or load_count + 1 == len(in_files)):
             logging.debug("dumping chunk with %d vars", load_buffer_count)
             cur_chunk = None
             if len(gt_parts) > 1:
@@ -431,29 +431,35 @@ def load_files(in_files, lowmem=None, buffer=32768):
                              'samples':samples,
                              'AF': af_parts[0]}
 
-            write_append_hdf5(cur_chunk, lowmem, is_first)
+            logging.critical(lowmem)
+            write_append_hdf5(cur_chunk, lowmem, is_first, calc_af)
             # reset buffering
             load_buffer_count = 0
             is_first = False
             gt_parts = []
             af_parts = []
 
-        logging.debug("Loaded %d of %d (%.2f%%) with %d vars (%d buff)", load_count, file_cnt,
-                      load_count / file_cnt * 100, load_row_count, load_buffer_count)
+        logging.debug("Loaded %d of %d (%.2f%%) with %d vars (%d buff)", load_count + 1,
+                      len(in_files), (load_count + 1) / len(in_files) * 100, load_row_count,
+                      load_buffer_count)
 
     if lowmem is not None:
         return h5py.File(lowmem, 'r')
 
-    if len(gt_parts) > 1:
-        logging.info("Concatenating")
-        return  {'GT':np.concatenate(gt_parts),
-                 'samples':samples,
-                 'AF': np.concatenate(af_parts)}
+    ret = {'samples': samples}
+    ret['GT'] = np.concatenate(gt_parts) if len(gt_parts) > 1 else gt_parts[0]
+    if calc_af:
+        logging.info("Calculating AF Matrix")
+        af_arr = np.concatenate(af_parts) if len(af_parts) > 1 else af_parts[0]
+        ret["AF_matrix"] = ret["GT"] * af_arr
+    else:
+        ret["AF_matrix"] = None
 
-    return  {'GT':gt_parts[0],
-             'samples':samples,
-             'AF': af_parts[0]}
+    return  ret
 
+###################
+# Input utilities #
+###################
 def parse_sample_lists(argument):
     """
     Parse the --include or --exclude argument.
@@ -468,6 +474,7 @@ def parse_sample_lists(argument):
         ret = argument.split(",")
     return ret
 
+
 def parse_weights(argument):
     """
     Parse the weights file
@@ -478,6 +485,7 @@ def parse_weights(argument):
     data.columns = ['sample', 'weight']
     data.set_index('sample', inplace=True)
     return data
+
 
 def parse_args(args):
     """
@@ -508,9 +516,9 @@ def parse_args(args):
     mperfg.add_argument("--lowmem", type=str, default=None,
                         help="Name of concatenated hdf5 file to create/use (%(default)s)")
     mperfg.add_argument("--buffer", type=int, default=32768,
-                        help="When using `--lowmem`, number of variants to buffer during concatenation (%(default)s)")
+                        help="Number of variants to buffer during concatenation (%(default)s)")
     mperfg.add_argument("--maxmem", type=int, default=2,
-                        help="Maximum amount of memory in (GB) to use with --lowmem. 0 keeps data in hdf5 (%(default)s)")
+                        help="Maximum amount of memory in (GB). 0 keeps data in hdf5 (%(default)s)")
 
     args = parser.parse_args(args)
     truvari.setup_logging(args.debug)
@@ -540,17 +548,18 @@ def select_main(cmdargs):
     global MAXMEM # pylint: disable=global-statement
     args = parse_args(cmdargs)
 
-    data = load_files(args.in_files, args.lowmem, args.buffer)
+    data = load_files(args.in_files, args.lowmem, args.buffer, args.af)
     args.subset = parse_sample_lists(args.subset)
     #args.include = parse_sample_lists(args.include)
     args.exclude = parse_sample_lists(args.exclude)
     args.weights = parse_weights(args.weights)
+
     mode = 'greedy_mem' if args.lowmem else 'greedy'
     MAXMEM = args.maxmem
     with open(args.out, 'w') as fout:
         fout.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
         m_iter = run_selection(data, args.count, mode, args.subset,
-                               args.exclude, args.af, args.weights)
+                               args.exclude, args.weights)
         for result in m_iter:
             logging.info("Selected %s (%s)", result[0], result[4])
             fout.write("\t".join([str(_) for _ in result]) + '\n')
