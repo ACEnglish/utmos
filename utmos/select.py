@@ -57,7 +57,7 @@ def mem_aware_hdf5_iter(matrix, max_mem):
         slice_mem_usage = one_row_size * m_len
         logging.debug("slicing %d rows @ %d ~%.3fGB", m_len, m_slice.start, slice_mem_usage)
         yield matrix[m_slice, :][:], m_slice
-            
+
 
 def do_lowmem_summation(matrix, variant_mask, sample_mask): #pylint:disable=unused-argument
     """
@@ -374,7 +374,6 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
         hf["AF_matrix"][-af_matrix.shape[0]:] = af_matrix
 
 
-#pylint:disable=too-many-statements
 def load_files(in_files, lowmem=None, buffer=32768):
     """
     Load and concatenate multiple files
@@ -540,7 +539,7 @@ def select_main(cmdargs):
     """
     global MAXMEM # pylint: disable=global-statement
     args = parse_args(cmdargs)
-    
+
     data = load_files(args.in_files, args.lowmem, args.buffer)
     args.subset = parse_sample_lists(args.subset)
     #args.include = parse_sample_lists(args.include)
