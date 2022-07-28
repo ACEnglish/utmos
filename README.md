@@ -63,8 +63,9 @@ As a test, the genotype-only chr22 snps from the 1kgp (2,504 samples x 1,103,547
 \* both axis pack is not yet implemented since the overhead it requires slows runtime a little bit. I'll implement it if there's any demand
 
 ```
-utmos [-h] [--lowmem] [-B BUFFER] [-c COMPRESS] in_file out_file
+utmos convert [-h] [--lowmem] [-B BUFFER] [-c COMPRESS] in_file out_file
 ```
+### Arguments:
 * `--lowmem` lowers memory usage by converting directly into an intermediate hdf5 file.
 * `--buffer` is an integer pased to scikit-allele during conversion and represents how many variants are parsed at
   once. The default value is probably fine for many use-cases, but performance can be tested. Generally, VCFs with 
@@ -75,6 +76,7 @@ utmos [-h] [--lowmem] [-B BUFFER] [-c COMPRESS] in_file out_file
 * `in_file` an input vcf[.gz]
 * `out_file` an output .jl file
 
+### Preparsing
 VCFs can be pre-filtered and piped into convert e.g.:
 ```
 bcftools view -i "AF >= 0.01" input.vcf.gz | utmos convert /dev/stdin output.jl
@@ -148,7 +150,7 @@ of memory is available.
 
 ## Reusing the `--lowmem file.hdf5` with `select`
 If you have a previous run in which you used `--lowmem` to make an hdf5 file, you can reuse it and save
-the concatenation/conversion work. Simply provide a single `in_file of `file.hdf5` or provide no `in_files` with the
+the concatenation/conversion work. Simply provide a single `in_file` of `file.hdf5` or provide no `in_files` and the
 parameter `--lowmem file.hdf5`
 
 ## Performace metrics
