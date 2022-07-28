@@ -24,11 +24,10 @@ def do_summation(matrix, variant_mask, sample_mask):
     """
     return matrix[~variant_mask].sum(axis=0) * sample_mask
 
-def do_lowmem_summation(matrix, variant_mask, sample_mask): #pylint:disable=unused-argument
+def mem_aware_hdf5_iter(matrix, max_mem):
     """
-    Sum the matrix along axis=0
-    if the matrix is an h5py.File, we'll operate in chunks
-    otherwise, it is all in memory and simple to do
+    Will read hdf5 in slices that fit into max_mem
+    with_slice = True will yield the chunk as well as the chunk's row slice
     """
     c_size = matrix.chunks
     logging.debug("csize is %s for shape of %s", c_size, matrix.shape)
@@ -38,8 +37,8 @@ def do_lowmem_summation(matrix, variant_mask, sample_mask): #pylint:disable=unus
 
     one_row_size = n_cols * 4 / 1e9
     per_chunk_size = one_row_size * c_size[0]
-
-    max_row_cnt = max(1, max(1, MAXMEM) / per_chunk_size * c_size[0])
+    max_chunk_count = max(1, max_mem) / per_chunk_size
+    max_row_cnt = max(1, max_chunk_count * c_size[0])
     if max_row_cnt < c_size[0]:
         max_row_cnt = c_size[0]
     # round to nearest chunk boundary
@@ -52,15 +51,25 @@ def do_lowmem_summation(matrix, variant_mask, sample_mask): #pylint:disable=unus
     else:
         max_row_cnt -= partition
     max_row_cnt = min(int(max_row_cnt), n_rows)
-
-    m_sum = np.zeros(n_cols)
     for row_start in range(0, n_rows, max_row_cnt):
         m_slice = slice(row_start, row_start + max_row_cnt, 1)
-        logging.debug("slicing %d rows between %d:%d ~%.3fGB", max_row_cnt, m_slice.start, m_slice.stop, per_chunk_size)
-        m_sum += matrix[m_slice, :].sum(axis=0)
+        m_len = min(m_slice.stop, n_rows) - m_slice.start
+        slice_mem_usage = one_row_size * m_len
+        logging.debug("slicing %d rows @ %d ~%.3fGB", m_len, m_slice.start, slice_mem_usage)
+        yield matrix[m_slice, :][:], m_slice
+            
+
+def do_lowmem_summation(matrix, variant_mask, sample_mask): #pylint:disable=unused-argument
+    """
+    Sum the matrix along axis=0
+    if the matrix is an h5py.File, we'll operate in chunks
+    otherwise, it is all in memory and simple to do
+    """
+    m_sum = np.zeros(matrix.shape[1])
+    for chunk, _ in mem_aware_hdf5_iter(matrix, MAXMEM):
+        m_sum += chunk.sum(axis=0)
     m_sum *= sample_mask
     return m_sum
-
 
 def calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix, sample_weights, summer=do_summation):
     """
@@ -124,29 +133,42 @@ def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mas
         yield [vcf_samples[use_sample], int(variant_count), int(new_variant_count),
                int(tot_captured), round(tot_captured / num_vars, 4)]
 
+def do_slicing_write(matrix, row_mask, col_mask, out):
+    """
+    Write masked matrix to out Dataset dset.write_direct
+    """
+    out_start_pos = 0
+    for chunk, m_slice in mem_aware_hdf5_iter(matrix, MAXMEM/2):
+        out_end_pos = out_start_pos + row_mask[m_slice].sum()
+        #out[out_start_pos:out_end_pos] = chunk[row_mask[m_slice]][:, col_mask]
+        # might be faster, but doubles the amount of memory
+        o_chunk = np.ascontiguousarray(chunk[row_mask[m_slice]][:, col_mask])
+        out.write_direct(o_chunk, dest_sel=np.r_[out_start_pos:out_end_pos, :])
+        out_start_pos = out_end_pos
+
 def rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name):
     """
     Attempting to update gt_matrix and af_matrix by pulling all the data into a smaller dataframe
     """
     # should remove previous temp
     logging.debug('rewriting to %s', temp_name)
-    n_cols = sample_mask.sum()
     n_rows = (~variant_mask).sum()
+    n_cols = sample_mask.sum()
+
     c_rows = min(n_rows, max(1, int(1e6 / 4 / n_cols)))
     c_size = (c_rows, n_cols)
     if 0 in c_size:
         logging.debug("finished? %s", c_size)
         return None, None
+
     with h5py.File(temp_name, 'w') as hf:
-        dset = hf.create_dataset('GT', shape=(n_rows, n_cols), compression="lzf", dtype='bool', chunks=c_size)
-        m_tmp = gt_matrix[~variant_mask, :]
-        m_tmp = np.ascontiguousarray(m_tmp[:, sample_mask][:])
-        dset.write_direct(m_tmp)
+        dset_g = hf.create_dataset('GT', shape=(n_rows, n_cols), compression="lzf", dtype='float', chunks=c_size)
+        do_slicing_write(gt_matrix, ~variant_mask, sample_mask, dset_g)
+        logging.debug('success?')
+
         if af_matrix:
-            dset = hf.create_dataset('AF_matrix', shape=(n_rows, n_cols), compression="lzf", dtype='float', chunks=c_size)
-            m_tmp = af_matrix[~variant_mask, :]
-            m_tmp = np.ascontiguousarray(m_tmp[:, sample_mask][:])
-            dset.write_direct(m_tmp)
+            dset_a = hf.create_dataset('AF_matrix', shape=(n_rows, n_cols), compression="lzf", dtype='float', chunks=c_size)
+            do_slicing_write(af_matrix, ~variant_mask, sample_mask, dset_a)
 
     logging.debug('reloading')
     new_fh = h5py.File(temp_name, 'r')
@@ -269,7 +291,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     logging.info("Variant Count %d", num_vars)
 
     select_count = max(1, int(num_samples * select_count) if select_count < 1 else int(select_count))
-    logging.info("Selecting %d", select_count)
+    logging.info("Selecting %d samples", select_count)
 
     # Build masks
     variant_mask = np.zeros(num_vars, dtype='bool')
