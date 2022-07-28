@@ -176,13 +176,13 @@ def greedy_mem_select(gt_matrix,
     Greedy calculation
     yields rows of each selected sample's information
 
-    gt_matrix = boolean matrix of genotype presence
-    select_count = how many samples we'll be selecting
-    vcf_samples = identifiers of sample names (len == gt_matrix.shape[1])
-    variant_mask = boolean matrix of variants where True == used
-    sample_mask = boolean matrix of samples where True == use
-    af_matrix = (optional) the af_matrix scores (af_matrix.shape == gt_matrix.shape)
-    sample_weights = (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
+    gt_matrix:      boolean matrix of genotype presence
+    select_count:   how many samples we'll be selecting
+    vcf_samples:    identifiers of sample names (len == gt_matrix.shape[1])
+    variant_mask:   boolean matrix of variants where True == used
+    sample_mask:    boolean matrix of samples where True == use
+    af_matrix:      (optional) the af_matrix scores (af_matrix.shape == gt_matrix.shape)
+    sample_weights: (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
 
     Expects input matrices to be h5py Datasets.
     Will do an iterative rewrite until is_memsafe == True
@@ -244,30 +244,42 @@ def greedy_mem_select(gt_matrix,
             gt_matrix = gt_matrix[:]
             af_matrix = af_matrix[:] if af_matrix else af_matrix
             for i in greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix,
-                                   sample_weights):
+                                   sample_weights, num_vars, total_variant_count, tot_captured):
                 yield i
             return
 
     # End greedy_mem
 
 
-def greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix=None, sample_weights=None):
+def greedy_select(gt_matrix,
+                  select_count,
+                  vcf_samples,
+                  variant_mask,
+                  sample_mask,
+                  af_matrix=None,
+                  sample_weights=None,
+                  num_vars=None,
+                  total_variant_count=None,
+                  tot_captured=None):
     """
     Greedy calculation
     yields rows of each selected sample's information
-    gt_matrix = boolean matrix of genotype presence
-    select_count = how many samples we'll be selecting
-    vcf_samples = identifiers of sample names (len == gt_matrix.shape[1])
-    variant_mask = boolean matrix of variants where True == used
-    sample_mask = boolean matrix of samples where True == use
-    af_matrix = (optional) the af_matrix scores (af_matrix.shape == gt_matrix.shape)
-    sample_weights = (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
-    """
-    num_vars = gt_matrix.shape[0]
-    logging.debug("getting total_variant_count")
-    total_variant_count = gt_matrix.sum(axis=0)
 
-    tot_captured = 0
+    gt_matrix:      boolean matrix of genotype presence
+    select_count:   how many samples we'll be selecting
+    vcf_samples:    identifiers of sample names (len == gt_matrix.shape[1])
+    variant_mask:   boolean matrix of variants where True == used
+    sample_mask:    boolean matrix of samples where True == use
+    af_matrix:      (optional) the af_matrix scores (af_matrix.shape == gt_matrix.shape)
+    sample_weights: (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
+    num_vars:       when switching from `greedy_mem_select`, we don't want to recalculate from subsetted data
+    total_variant_count: same as num_vars
+    """
+    num_vars = gt_matrix.shape[0] if num_vars is None else num_vars
+    logging.debug("getting total_variant_count")
+    total_variant_count = gt_matrix.sum(axis=0) if total_variant_count is None else total_variant_count
+
+    tot_captured = 0 if tot_captured is None else tot_captured
     for _ in range(select_count):
         use_sample, new_variant_count = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
                                                          sample_weights)
