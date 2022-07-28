@@ -173,7 +173,7 @@ assert_equal $(fn_md5 $OD/select_big.txt) $(fn_md5 $ANSDIR/select_big.txt)
 run test_select_h5append $ut select --maxmem 0 -c 5 --buffer 500 --af -o $OD/select_multi_lm.txt\
     --lowmem $OD/tmp.hdf5 $INDIR/chunk0.jl $INDIR/chunk2.jl
 assert_exit_code 0
-assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_multi_lm.txt)
+assert_equal $(fn_md5 $OD/select_multi_lm.txt) $(fn_md5 $ANSDIR/select_multi_lm.txt)
 
 run test_select_tinyweight $ut select --maxmem 0 --count 20 --lowmem $OD/tmp.hdf5 $INDIR/chunk_tiny.vcf \
     -o $OD/select_tiny_weights.txt --weights $INDIR/weights.txt
