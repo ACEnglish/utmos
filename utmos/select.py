@@ -138,12 +138,13 @@ def do_slicing_write(matrix, row_mask, col_mask, out):
     Write masked matrix to out Dataset dset.write_direct
     """
     out_start_pos = 0
-    for chunk, m_slice in mem_aware_hdf5_iter(matrix, MAXMEM/2):
+    for chunk, m_slice in mem_aware_hdf5_iter(matrix, MAXMEM):
         out_end_pos = out_start_pos + row_mask[m_slice].sum()
-        #out[out_start_pos:out_end_pos] = chunk[row_mask[m_slice]][:, col_mask]
-        # might be faster, but doubles the amount of memory
-        o_chunk = np.ascontiguousarray(chunk[row_mask[m_slice]][:, col_mask])
-        out.write_direct(o_chunk, dest_sel=np.r_[out_start_pos:out_end_pos, :])
+        out[out_start_pos:out_end_pos] = chunk[row_mask[m_slice]][:, col_mask]
+        #might be faster ?, but increases the amount of memory for copy(?)
+        #chunk = chunk[row_mask[m_slice]][:, col_mask]
+        #chunk = np.ascontiguousarray(chunk)
+        #out.write_direct(chunk, dest_sel=np.r_[out_start_pos:out_end_pos, :])
         out_start_pos = out_end_pos
 
 def rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name):
@@ -162,12 +163,10 @@ def rewrite_smaller_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_n
         return None, None
 
     with h5py.File(temp_name, 'w') as hf:
-        dset_g = hf.create_dataset('GT', shape=(n_rows, n_cols), compression="lzf", dtype='float', chunks=c_size)
+        dset_g = hf.create_dataset('GT', shape=(n_rows, n_cols), compression="lzf", dtype='bool', chunks=c_size)
         do_slicing_write(gt_matrix, ~variant_mask, sample_mask, dset_g)
-        logging.debug('success?')
-
         if af_matrix:
-            dset_a = hf.create_dataset('AF_matrix', shape=(n_rows, n_cols), compression="lzf", dtype='float', chunks=c_size)
+            dset_a = hf.create_dataset('AF_matrix', shape=(n_rows, n_cols), compression="lzf", dtype='float32', chunks=c_size)
             do_slicing_write(af_matrix, ~variant_mask, sample_mask, dset_a)
 
     logging.debug('reloading')
@@ -266,6 +265,7 @@ def greedy_mem_select(gt_matrix, select_count, vcf_samples, variant_mask, sample
             logging.info("Dataset small enough to hold in memory")
             gt_matrix = gt_matrix[:]
             af_matrix = af_matrix[:] if af_matrix else af_matrix
+            variant_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
             for i in greedy_select(gt_matrix, select_count, vcf_samples, variant_mask, sample_mask, af_matrix,
                                    sample_weights):
                 yield i
@@ -347,23 +347,21 @@ def write_append_hdf5(cur_part, out_name, is_first=False):
     """
     Handle the hdf5 file
     """
-    # Future - make af_matrix optional
-    logging.debug('calc af_matrix')
-
     #logging.debug("sorting by AF") (doesn't make sense with greedy_mem not slicing as much anymore)
     #m_order = cur_part["AF"].argsort(axis=0)
     #cur_part["GT"] = cur_part["GT"][m_order]
     #cur_part["AF"] = cur_part["AF"][m_order]
 
+    # Future - make af_matrix optional
+    logging.debug('calc af_matrix')
     af_matrix = cur_part["GT"] * cur_part["AF"]
     af_matrix[np.isnan(af_matrix)] = 0
     n_cols = cur_part['GT'].shape[1]
     c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
     if is_first:
-        logging.debug('write')
         with h5py.File(out_name, 'w') as hf:
-            hf.create_dataset('GT', data=cur_part["GT"], compression="lzf", chunks=c_size, maxshape=(None, n_cols))
-            hf.create_dataset('AF_matrix', data=af_matrix, compression="lzf", chunks=c_size, maxshape=(None, n_cols))
+            hf.create_dataset('GT', data=cur_part["GT"], compression="lzf", dtype='bool', chunks=c_size, maxshape=(None, n_cols))
+            hf.create_dataset('AF_matrix', data=af_matrix, compression="lzf", dtype='float32', chunks=c_size, maxshape=(None, n_cols))
             hf.create_dataset('samples', data=cur_part["samples"], compression="lzf", chunks=True, maxshape=(None,))
         return
 
