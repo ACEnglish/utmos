@@ -5,9 +5,10 @@
 Maximum-coverage algorithm to select samples for validation and resequencing.
 This is a reimplementation of [SVCollector](https://github.com/fritzsedlazeck/SVCollector)
 
-SVCollector is a tool for solving the maximum-coverage problem for sample selection. Utmos is a python re-write of that code
-which leverages scikit-allel, numpy, and joblib. Utmos is designed for extremely large cohorts by allowing subsets of
-variants to be parsed and stored as small(ish) intermediate files before concatenating during the selection step.
+Utmos is a tool for solving the maximum-coverage problem for sample selection. Utmos leverages scikit-allele, joblib,
+numpy, and hdf5 to allow inputs from extremely large cohorts. Subsets of variants can be converted into smaller
+processing-ready files, which allows the data intake step to become massively parallel. Then, during selection, Utmos
+concatenates the subsets and allows control over memory consumption for easier analysis.
 
 ## Install
 
@@ -62,14 +63,13 @@ As a test, the genotype-only chr22 snps from the 1kgp (2,504 samples x 1,103,547
 \* both axis pack is not yet implemented since the overhead it requires slows runtime a little bit. I'll implement it if there's any demand
 
 ```
-utmos convert [-h] [--lowmem] [-C CHUNK_LENGTH] [-c COMPRESS]
-              in_file out_file
+utmos [-h] [--lowmem] [-B BUFFER] [-c COMPRESS] in_file out_file
 ```
-* `--lowmem` lowers memory usage if the input file is a vcf[.gz] by converting directly into an intermediate hdf5 file.
-* `--chunk_length` is an integer pased to scikit-allele during conversion and represents how many variants are parsed at
-  once. The default value is probably fine for most use cases, but performance can be tested. Generally, VCFs with 
-  extremely high sample counts (100k+) should have a smaller chunk_length (the default). VCFs without many samples or
-  with high amounts of memory available can use a higher chunk_length in an attempt to speed up conversion.
+* `--lowmem` lowers memory usage by converting directly into an intermediate hdf5 file.
+* `--buffer` is an integer pased to scikit-allele during conversion and represents how many variants are parsed at
+  once. The default value is probably fine for many use-cases, but performance can be tested. Generally, VCFs with 
+  extremely high sample counts (100k+) should have a smaller buffer (the default). VCFs without many samples or
+  with high amounts of memory available can use a higher buffer in an attempt to speed up conversion.
 * `--compress` compression level performed by joblib between 0 (lowest compression, fastest IO) and 10 (high
   compression, slower IO)
 * `in_file` an input vcf[.gz]
@@ -84,8 +84,8 @@ bcftools view -i "AF >= 0.01" input.vcf.gz | utmos convert /dev/stdin output.jl
 
 Select samples for validation and resequencing.
 Works by iteratively selecting samples based on a score and reporting how many variants the sample contains as well as
-how many unseen variants contributed by the sample. Scores by default are variant counts which can then be weighted with
-`--weights` and/or `--af`
+how many unseen variants are contributed by the sample. Scores by default are variant counts which can optionally be
+weighed with `--weights` and/or `--af`
 
 ```
 utmos select [-h] [-c COUNT] [-o OUT] [--debug] [--af] [--weights WEIGHTS]
@@ -112,24 +112,28 @@ A tab-delimited file of samples and a weight. Not every sample in the vcf needs 
 Any sample without a provided weight is given a 1
 
 #### subset
-Provide a list of samples to analyze. 
+A subset of samples to include in the selection 
 
 #### exclude
-Provie a list of samples to exclude from the analysis.
+A list of samples to exclude from the analysis
 
 ### Memory arguments:
-These are arguments are for when there's more data than can be held in memory. By default, utmos will hold all variants 
-in memory. This comes out to approximately `(num_variants * num_samples * dtype_bytes * num_matrix) / 1e9` GB of memory. 
-`dtype_bytes` is the size per-datapoint in bytes (assumed to be 4) and `num_matrix` is 1 by default and 2 if `--af` is 
-also used. For datasets with too much data to hold in memory, utmos allows a user to take advantage of hdf5 files and 
-use disk storage instead of memory. However, this comes at the expense of needing to create a large intermediate file 
-and high IO on said file, thus one should expect an increased runtime.
+By default, utmos will hold all variants in memory. This consumes approximately
 
-The `--lowmem` mode works by first concatenating all the input vcf/jl together into an hdf5 file. At most, `--buffer`
+`(num_variants * num_samples * dtype_bytes * num_matrix) / 1e9` GB of memory. 
+
+Where `dtype_bytes` is the size per-datapoint (typically 4 bytes) and `num_matrix` is 1 without and 2 with `--af`.
+
+For datasets with too much data to hold in memory, utmos allows a user to take advantage of hdf5 files and use disk
+storage instead of memory. However, this comes at the expense of needing to create an intermediate files and increases
+IO, thus one should expect an increased runtime.
+
+The `--lowmem` mode works by first concatenating all the input vcf/jl together into an hdf5 file. `--buffer`
 rows will be held in-memory before writing/appending the data into the hdf5 file. Then, for each iteration, the dataset
 is reduced by removing the used sample's column and all variants the sample contained from the rows before writing the 
 reduced matrices to a temporary hdf5 in the `$TMPDIR`. If at any point through the iterations the dataset is estimated 
-to have a total size below `--maxmem`, the full dataset is pulled into memory before continuing.
+to have a total size below `--maxmem`, the full dataset is pulled into memory before continuing to the end of the
+analysis.
 
 #### lowmem
 Name of the hdf5 file which is filled with the concatenated in_files.
@@ -143,7 +147,7 @@ possible can be skipped by setting `--maxmem 0`. However, when actually performi
 of memory is available.
 
 ## Reusing the `--lowmem file.hdf5` with `select`
-If you have a previous run in which you used `--lowmem` to make an  hdf5 file, you can reuse that file and save
+If you have a previous run in which you used `--lowmem` to make an hdf5 file, you can reuse it and save
 the concatenation/conversion work. Simply provide a single `in_file of `file.hdf5` or provide no `in_files` with the
 parameter `--lowmem file.hdf5`
 
@@ -196,4 +200,3 @@ directory for the utmos run. You can provide parameters directly to the entry po
 ```bash
 docker run -v `pwd`:/data -it utmos convert example.vcf.gz example.jl
 ```
-

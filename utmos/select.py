@@ -5,7 +5,6 @@ import os
 import sys
 import logging
 import argparse
-import tempfile
 
 import h5py
 import joblib
@@ -212,7 +211,7 @@ def greedy_mem_select(gt_matrix,
 
         ## Re-writing to reduce size
         pre_shape = gt_matrix.shape
-        temp_name = os.path.join(tempfile.gettempdir(), next(tempfile._get_candidate_names()) + '.utmos.tmp.hdf5')  # pylint:disable=protected-access, stop-iteration-return
+        temp_name = truvari.make_temp_filename(extension='.utmos.tmp.hdf5')
         gt_matrix, af_matrix = reduce_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name)
 
         # clean temporary files
