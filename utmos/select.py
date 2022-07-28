@@ -206,10 +206,6 @@ def greedy_mem_select(gt_matrix,
         variant_count = total_variant_count[use_sample]
         tot_captured += new_variant_count
 
-        if new_variant_count == 0:
-            logging.warning("Ran out of new variants")
-            return
-
         # Gonna be dropping this sample
         vcf_samples = vcf_samples[sample_mask]
         total_variant_count = total_variant_count[sample_mask]
@@ -236,6 +232,7 @@ def greedy_mem_select(gt_matrix,
         ]
 
         if not gt_matrix:  # Ran out of data
+            logging.warning("Ran out of new variants")
             return
 
         logging.debug("shape %s -> %s", pre_shape, gt_matrix.shape)
@@ -344,7 +341,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
                 sample_weights[pos] = weights.loc[i]
 
     gt_matrix = data['GT']
-    af_matrix = data["AF_matrix"] if 'AF_matrix' in data and data["AF_matrix"] is not None else None
+    af_matrix = data["AF_matrix"] if 'AF_matrix' in data else None
 
     m_select = SELECTORS[mode]
     if isinstance(data, h5py.File) and is_memsafe(gt_matrix.shape, af_matrix is not None):
@@ -425,7 +422,7 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
     is_first = True
     for load_count, i in enumerate(in_files):
         if i.endswith((".vcf.gz", ".vcf")):
-            dat = read_vcf(i, lowmem is not None)
+            dat = read_vcf(i, lowmem is not None, buffer)
         elif i.endswith(".jl"):
             dat = joblib.load(i)
         else:
@@ -454,7 +451,6 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
             else:
                 cur_chunk = {'GT': gt_parts[0], 'samples': samples, 'AF': af_parts[0]}
 
-            logging.critical(lowmem)
             write_append_hdf5(cur_chunk, lowmem, is_first, calc_af)
             # reset buffering
             load_buffer_count = 0

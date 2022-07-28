@@ -24,11 +24,11 @@ def parse_args(args):
     parser.add_argument("--lowmem",
                         action="store_true",
                         help="Lower memory usage with hdf5 temporary files (%(default)s)")
-    parser.add_argument("-C",
-                        "--chunk_length",
+    parser.add_argument("-B",
+                        "--buffer",
                         type=int,
-                        default=2 ^ 14,
-                        help="Length (number of variants) of chunks in which data are processed. (%(default)s)")
+                        default=50000,
+                        help="Number of variants read at a time by scikit-allel (%(default)s)")
     parser.add_argument("-c", "--compress", type=int, default=5, help="joblib compress level 1-9 (%(default)s)")
 
     args = parser.parse_args(args)
@@ -36,7 +36,7 @@ def parse_args(args):
     return args
 
 
-def read_vcf(in_file, lowmem=False, chunk_length=2 ^ 14):
+def read_vcf(in_file, lowmem=False, chunk_length=2000):
     """
     Read a vcf's genotypes and return numpy arrays
     """
@@ -84,7 +84,7 @@ def cvt_main(cmdargs):
     Main
     """
     args = parse_args(cmdargs)
-    data = read_vcf(args.in_file, args.lowmem, args.chunk_length)
+    data = read_vcf(args.in_file, args.lowmem, args.buffer)
     logging.info("Saving genotypes")
     joblib.dump(data, args.out_file, compress=args.compress)
     logging.info("Finished conversion")

@@ -21,6 +21,6 @@ badge = anybadge.Badge('coverage', coverage_pct,
                        thresholds=thresholds, value_suffix="%")
 badge.write_badge('imgs/coverage.svg', overwrite=True)
 
-# failunder -- :'( I'm cheating for now
-#if coverage_pct < 85:
-    #exit(1)
+# failunder
+if coverage_pct < 98:
+    exit(1)
