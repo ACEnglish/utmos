@@ -1,6 +1,7 @@
 """
 convert vcfs to lightweight numpy arrays
 """
+import json
 import logging
 import argparse
 import tempfile

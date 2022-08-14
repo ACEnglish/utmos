@@ -3,6 +3,7 @@ Select fewest samples with maximum number of variants
 """
 import os
 import sys
+import json
 import logging
 import argparse
 
