@@ -114,10 +114,12 @@ A tab-delimited file of samples and a weight. Not every sample in the vcf needs 
 Any sample without a provided weight is given a 1
 
 #### subset
-A subset of samples to include in the selection 
+A subset of samples to include in the selection. To help organize your metadata, multiple `--subset` arguments can be
+provided and they will be concatenated. e.g. you have `subsetA.txt` and you would like to add sample `HG1234` to that
+subset for an utmos run, simply specify `utmos select --subset subsetA.txt --subset HG1234 input.jl`
 
 #### exclude
-A list of samples to exclude from the analysis
+A list of samples to exclude from the analysis. Similar to `--subset`, you can provide multiple `--exclude` arguments.
 
 ### Memory arguments:
 By default, utmos will hold all variants in memory. This consumes approximately

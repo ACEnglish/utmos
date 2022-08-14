@@ -488,11 +488,12 @@ def parse_sample_lists(argument):
     ret = []
     if not argument:
         return ret
-    if os.path.exists(argument):
-        with open(argument, 'r') as fh:
-            ret = [_.strip() for _ in fh]
-    else:
-        ret = argument.split(",")
+    for i in argument:
+        if os.path.exists(i):
+            with open(i, 'r') as fh:
+                ret.extend([_.strip() for _ in fh])
+        else:
+            ret.extend(i.split(","))
     return ret
 
 
@@ -530,10 +531,12 @@ def parse_args(args):
     scoreg.add_argument("--subset",
                         type=str,
                         default=None,
+                        action='append',
                         help="Filename with or Comma-separated list of samples to analyze")
     scoreg.add_argument("--exclude",
                         type=str,
                         default=None,
+                        action='append',
                         help="Filename with or Comma-separated list of samples to exclude selection")
 
     mperfg = parser.add_argument_group("Memory Arguments")
