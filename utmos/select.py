@@ -571,6 +571,7 @@ def parse_args(args):
         logging.info("Switching on lowmem for hdf5 input")
         args.lowmem = 1
 
+    logging.info("Params:\n%s", json.dumps(vars(args), indent=4))
     return args
 
 

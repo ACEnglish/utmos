@@ -33,6 +33,7 @@ def parse_args(args):
 
     args = parser.parse_args(args)
     truvari.setup_logging()
+    logging.info("Params:\n%s", json.dumps(vars(args), indent=4))
     return args
 
 
