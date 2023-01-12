@@ -33,7 +33,7 @@ setup(
       ]
     },
     install_requires=[
-        "truvari>=3.4.0", 
+        "truvari>=3.5.0",
         "scikit-allel==1.3.5",
         "h5py==3.7.0",
     ],

@@ -160,7 +160,9 @@ def is_memsafe(shape, with_af=False):
     Simple memory usage estimate in GB
     returns true if we think we can hold a full dataset in memory
     """
-    return (shape[0] * shape[1] * 4 * (int(with_af) + 1)) / 1e9 < MAXMEM
+    data_size = (shape[0] * shape[1] * 4 * (int(with_af) + 1)) / 1e9
+    logging.debug("Estimated data size %.2fGB", data_size)
+    return data_size < MAXMEM
 
 
 ##############
@@ -212,7 +214,7 @@ def greedy_mem_select(gt_matrix,
 
         ## Re-writing to reduce size
         pre_shape = gt_matrix.shape
-        temp_name = truvari.make_temp_filename(extension='.utmos.tmp.hdf5')
+        temp_name = truvari.make_temp_filename(suffix='.utmos.tmp.hdf5')
         gt_matrix, af_matrix = reduce_hdf5(gt_matrix, af_matrix, variant_mask, sample_mask, temp_name)
 
         # clean temporary files
@@ -281,6 +283,7 @@ def greedy_select(gt_matrix,
     total_variant_count = gt_matrix.sum(axis=0) if total_variant_count is None else total_variant_count
 
     tot_captured = 0 if tot_captured is None else tot_captured
+    next_pct = 0.05
     for _ in range(select_count):
         use_sample, new_variant_count = calculate_scores(gt_matrix, variant_mask, sample_mask, af_matrix,
                                                          sample_weights)
@@ -290,6 +293,21 @@ def greedy_select(gt_matrix,
         if new_variant_count == 0:
             logging.warning("Ran out of new variants")
             break
+        # Nice idea, but you're effectively holding a two copies in memory. Pretty slow
+        # Though the time it takes to copy is slower than just pushing through
+        # Pluse there's some evidence the masking works
+        # as HDF5... so maybe
+        # But then you'd need to figure out the optimal next_pct...
+        #m_pct = round(tot_captured / num_vars, 4)
+        #if m_pct >= next_pct:
+            #logging.debug("shortening")
+            #gt_matrix = gt_matrix[~variant_mask][:, sample_mask].copy()
+            #total_variant_count = total_variant_count[sample_mask]
+            #vcf_samples = vcf_samples[sample_mask]
+            #next_pct += 0.05
+            #variant_mask = np.zeros(gt_matrix.shape[0], dtype='bool')
+            #sample_mask = np.ones(gt_matrix.shape[1], dtype='bool')
+            #is_memsafe(gt_matrix.shape, af_matrix != None)
 
         yield [
             vcf_samples[use_sample],
@@ -310,7 +328,7 @@ SELECTORS = {"greedy": greedy_select, "greedy_mem": greedy_mem_select}
 ####################
 # Setup/Management #
 ####################
-def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=None, weights=None):
+def run_selection(data, select_count=0.02, mode='greedy', af=False, subset=None, exclude=None, weights=None):
     """
     Setup the selection calculation
     if select_count [0,1], select that percent of samples
@@ -340,7 +358,8 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     if exclude:
         logging.info(f"Excluding {len(exclude)} samples")
         sample_mask &= ~np.isin(vcf_samples, exclude)
-    logging.debug(f"ending with {sample_mask.sum()} samples")
+    if subset or exclude:
+        logging.info(f"Ending with {sample_mask.sum()} samples")
 
     sample_weights = None
     if weights is not None:
@@ -351,7 +370,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
                 sample_weights[pos] = weights.loc[i]
 
     gt_matrix = data['GT']
-    af_matrix = data["AF_matrix"] if 'AF_matrix' in data else None
+    af_matrix = data["AF_matrix"] if 'AF_matrix' in data and af else None
 
     m_select = SELECTORS[mode]
     if isinstance(data, h5py.File) and is_memsafe(gt_matrix.shape, af_matrix is not None):
@@ -375,6 +394,8 @@ def write_append_hdf5(cur_part, out_name, is_first=False, calc_af=False):
         af_matrix = None
 
     n_cols = cur_part['GT'].shape[1]
+    # Consider turning 1e6 into a parameter?
+    # Or maybe just turning chunking off..
     c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
 
     if is_first:
@@ -592,7 +613,7 @@ def select_main(cmdargs):
     MAXMEM = args.maxmem
     with open(args.out, 'w') as fout:
         fout.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
-        m_iter = run_selection(data, args.count, mode, args.subset, args.exclude, args.weights)
+        m_iter = run_selection(data, args.count, mode, args.af, args.subset, args.exclude, args.weights)
         for result in m_iter:
             logging.info("Selected %s (%.1f%% of variants)", result[0], result[4] * 100)
             fout.write("\t".join([str(_) for _ in result]) + '\n')
