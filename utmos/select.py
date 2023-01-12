@@ -268,7 +268,6 @@ def greedy_select(matrix,
     num_vars:            when switching from `greedy_mem_select`, we don't want to recalculate from subsetted data
     """
     num_vars = matrix.shape[0] if num_vars is None else num_vars
-    logging.debug("getting total_variant_count")
 
     tot_captured = 0 if tot_captured is None else tot_captured
     #next_pct = 0.05
