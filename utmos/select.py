@@ -66,7 +66,7 @@ def do_inmem_sum(matrix, variant_mask, sample_mask):
     m_sum = matrix[~variant_mask].sum(axis=0) * sample_mask
     if matrix.dtype == bool:
         return m_sum, m_sum
-    return m_sum, (matrix[~variant_mask] != 0).sum(axis=0)
+    return m_sum, np.count_nonzero(matrix[~variant_mask], axis=0) * sample_mask
 
 
 def do_lowmem_sum(matrix, variant_mask, sample_mask):  #pylint:disable=unused-argument
@@ -81,8 +81,9 @@ def do_lowmem_sum(matrix, variant_mask, sample_mask):  #pylint:disable=unused-ar
         if matrix.dtype == bool:
             m_tot += m_sum
         else:
-            m_tot += (chunk != 0).sum(axis=0)
+            m_tot += np.count_nonzero(chunk, axis=0)
     m_sum *= sample_mask
+    m_tot *= sample_mask
     return m_sum, m_tot
 
 
@@ -106,7 +107,7 @@ def calculate_scores(matrix, variant_mask, sample_mask, sample_weights, sumfunc=
     new_variant_count = cur_sample_count[use_sample]
 
     sample_mask[use_sample] = False
-    variant_mask |= (matrix[:, use_sample] != 0)
+    variant_mask = np.where(matrix[:, use_sample], True, variant_mask)
 
     return use_sample, new_variant_count
 
@@ -326,7 +327,9 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     logging.info("Sample Count %d", num_samples)
     logging.info("Variant Count %d", num_vars)
 
-    select_count = max(1, int(num_samples * select_count) if select_count < 1 else int(select_count))
+    select_count = len(num_samples) if select_count < 0 \
+                   else max(1, int(num_samples * select_count) if select_count < 1 \
+                   else int(select_count))
     logging.info("Selecting %d samples", select_count)
 
     vcf_samples = data['samples']
@@ -536,7 +539,7 @@ def parse_args(args):
                         "--count",
                         type=float,
                         default=0.02,
-                        help="Number of samples to select as a percent if <1 or count if >=1 (%(default)s)")
+                        help="Number of samples to select as a percent if <1 or count if >=1 or -1 for all (%(default)s)")
     parser.add_argument("-o", "--out", type=str, default="/dev/stdout", help="Output file (stdout)")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
 
