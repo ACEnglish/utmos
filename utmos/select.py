@@ -69,7 +69,7 @@ def do_inmem_sum(matrix, variant_mask, sample_mask):
     return m_sum, np.count_nonzero(matrix[~variant_mask], axis=0) * sample_mask
 
 
-def do_lowmem_sum(matrix, variant_mask, sample_mask):  #pylint:disable=unused-argument
+def do_lowmem_sum(matrix, variant_mask, sample_mask): #pylint:disable=unused-argument
     """
     Sum the h5py.Dataset matrix along axis=0
     Returns the scored sum and the new variant count
@@ -107,7 +107,7 @@ def calculate_scores(matrix, variant_mask, sample_mask, sample_weights, sumfunc=
     new_variant_count = cur_sample_count[use_sample]
 
     sample_mask[use_sample] = False
-    variant_mask = np.where(matrix[:, use_sample], True, variant_mask)
+    variant_mask |= matrix[:, use_sample] != 0
 
     return use_sample, new_variant_count
 
