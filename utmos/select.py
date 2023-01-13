@@ -401,9 +401,9 @@ def write_append_hdf5(cur_part, out_name, is_first=False, calc_af=False):
     with h5py.File(out_name, 'a') as hf:
         hf["data"].resize((hf["data"].shape[0] + cur_part["GT"].shape[0]), axis=0)
         if not calc_af:
-            hf["data"][-cur_part["data"].shape[0]:] = cur_part["GT"]
+            hf["data"][-cur_part["GT"].shape[0]:] = cur_part["GT"]
         else:
-            hf["data"][-cur_part["data"].shape[0]:] = cur_part["GT"] * cur_part["AF"]
+            hf["data"][-cur_part["GT"].shape[0]:] = cur_part["GT"] * cur_part["AF"]
 
 def add_varcount_to_h5(fn, var_count):
     """
