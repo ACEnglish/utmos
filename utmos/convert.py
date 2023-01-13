@@ -22,6 +22,8 @@ def parse_args(args):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("in_file", type=str, help="Input VCF")
     parser.add_argument("out_file", type=str, help="Output joblib")
+    parser.add_argument("--no-singleton", action="store_true",
+                        help="Remove singleton variants")
     parser.add_argument("--lowmem",
                         action="store_true",
                         help="Lower memory usage with hdf5 temporary files (%(default)s)")
@@ -38,7 +40,7 @@ def parse_args(args):
     return args
 
 
-def read_vcf(in_file, lowmem=False, chunk_length=2000):
+def read_vcf(in_file, lowmem=False, chunk_length=2000, no_singleton=False):
     """
     Read a vcf's genotypes and return numpy arrays
     """
@@ -53,6 +55,11 @@ def read_vcf(in_file, lowmem=False, chunk_length=2000):
     logging.info(f"Converting genotypes to bool {data['calldata/GT'].shape}")
 
     gts = allel.GenotypeArray(data["calldata/GT"])
+    if no_singleton:
+        ac = gts.count_alleles()
+        sing = ac.is_singleton(allele=1) | ac.is_singleton(allele=0)
+        logging.info("Removing %d singletons", sing.sum())
+        gts = gts[~sing]
 
     is_het = gts.is_het()
     num_hets = is_het.sum().sum()
@@ -86,7 +93,7 @@ def cvt_main(cmdargs):
     Main
     """
     args = parse_args(cmdargs)
-    data = read_vcf(args.in_file, args.lowmem, args.buffer)
+    data = read_vcf(args.in_file, args.lowmem, args.buffer, args.no_singleton)
     logging.info("Saving genotypes")
     joblib.dump(data, args.out_file, compress=args.compress)
     logging.info("Finished conversion")

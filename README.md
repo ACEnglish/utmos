@@ -63,9 +63,10 @@ As a test, the genotype-only chr22 snps from the 1kgp (2,504 samples x 1,103,547
 \* both axis pack is not yet implemented since the overhead it requires slows runtime a little bit. I'll implement it if there's any demand
 
 ```
-utmos convert [-h] [--lowmem] [-B BUFFER] [-c COMPRESS] in_file out_file
+usage: convert [-h] [--no-singleton] [--lowmem] [-B BUFFER] [-c COMPRESS] in_file out_file
 ```
 ### Arguments:
+* `--no-singleton` exclude variants which are singletons
 * `--lowmem` lowers memory usage by converting directly into an intermediate hdf5 file.
 * `--buffer` is an integer pased to scikit-allele during conversion and represents how many variants are parsed at
   once. The default value is probably fine for many use-cases, but performance can be tested. Generally, VCFs with 
@@ -79,7 +80,7 @@ utmos convert [-h] [--lowmem] [-B BUFFER] [-c COMPRESS] in_file out_file
 ### Preparsing
 VCFs can be pre-filtered and piped into convert e.g.:
 ```
-bcftools view -i "AF >= 0.01" input.vcf.gz | utmos convert /dev/stdin output.jl
+bcftools view -i "FILTER == 'PASS'" input.vcf.gz | utmos convert /dev/stdin output.jl
 ```
 
 ## utmos select
@@ -90,10 +91,10 @@ how many unseen variants are contributed by the sample. Scores by default are va
 weighed with `--weights` and/or `--af`
 
 ```
-utmos select [-h] [-c COUNT] [-o OUT] [--debug] [--af] [--weights WEIGHTS]
-              [--subset SUBSET] [--exclude EXCLUDE] [--lowmem LOWMEM]
-              [--buffer BUFFER] [--maxmem MAXMEM]
-              in_files [in_files ...]
+usage: select [-h] [-c COUNT] [-o OUT] [--debug] [--af] [--weights WEIGHTS]
+	      [--subset SUBSET] [--exclude EXCLUDE] [--lowmem LOWMEM]
+	      [--buffer BUFFER] [--maxmem MAXMEM]
+	      [in_files ...]
 ```
 
 ### Basic arguments:
@@ -103,15 +104,17 @@ utmos select [-h] [-c COUNT] [-o OUT] [--debug] [--af] [--weights WEIGHTS]
   saves time by not needing to concatenate results between multiple runs of a dataset.
 
 #### count
-Sets how many samples are selected. Can be a count or a percent of samples if < 1.
+Sets how many samples are selected. Can be a count (>= 1) or a percent of samples if < [0, 1). Select all samples (or
+until all variants have been used, whichever comes first) with -1
 
 ### Scoring arguments:
 #### af
-For each iteration, weigh the variants by their allele frequency. This helps reduce bias towards rare/private alleles.
+Reduce bias towards rare/private alleles by using the allele-frequency weighted matrix for scoring. So, instead of 0/1
+for variant presence in each cell of the matrix, the value will be `presence * AF`
 
 #### weight
-A tab-delimited file of samples and a weight. Not every sample in the vcf needs to be given a score in the weight file.
-Any sample without a provided weight is given a 1
+A tab-delimited file of samples and their weights. Not every sample in the vcf needs to be given a score in the weight file.
+Any sample without a provided weight is given a 1.
 
 #### subset
 A subset of samples to include in the selection. To help organize your metadata, multiple `--subset` arguments can be
@@ -124,12 +127,12 @@ A list of samples to exclude from the analysis. Similar to `--subset`, you can p
 ### Memory arguments:
 By default, utmos will hold all variants in memory. This consumes approximately
 
-`(num_variants * num_samples * dtype_bytes * num_matrix) / 1e9` GB of memory. 
+`(num_variants * num_samples * dtype_bytes) / 1e9` GB of memory. 
 
-Where `dtype_bytes` is the size per-datapoint (typically 4 bytes) and `num_matrix` is 1 without and 2 with `--af`.
+Where `dtype_bytes` is the size per-datapoint (typically 4 bytes).
 
 For datasets with too much data to hold in memory, utmos allows a user to take advantage of hdf5 files and use disk
-storage instead of memory. However, this comes at the expense of needing to create an intermediate files and increases
+storage instead of memory. However, this comes at the expense of needing to create intermediate files and increases
 IO, thus one should expect an increased runtime.
 
 The `--lowmem` mode works by first concatenating all the input vcf/jl together into an hdf5 file. `--buffer`
@@ -153,7 +156,8 @@ of memory is available.
 ## Reusing the `--lowmem file.hdf5` with `select`
 If you have a previous run in which you used `--lowmem` to make an hdf5 file, you can reuse it and save
 the concatenation/conversion work. Simply provide a single `in_file` of `file.hdf5` or provide no `in_files` and the
-parameter `--lowmem file.hdf5`
+parameter `--lowmem file.hdf5`. Note that if you create an hdf5 file with `select --af`, it will hold the AF weighted
+matrix and can only be reused with `select --af`.
 
 ## Performace metrics
 Running on a 2013 Mac Pro and using chr22 from 1kgp genotype  

@@ -327,7 +327,7 @@ def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=N
     logging.info("Sample Count %d", num_samples)
     logging.info("Variant Count %d", num_vars)
 
-    select_count = len(num_samples) if select_count < 0 \
+    select_count = num_samples if select_count < 0 \
                    else max(1, int(num_samples * select_count) if select_count < 1 \
                    else int(select_count))
     logging.info("Selecting %d samples", select_count)
