@@ -21,11 +21,11 @@ MAXMEM = 2  # in GB
 #############
 # Core code #
 #############
-def do_sum2(matrix, variant_mask, sample_mask):
+def do_sum_piece(m_slice, matrix, variant_mask, sample_mask):
     m_sum = np.zeros(matrix.shape[1])
     m_tot = np.zeros(matrix.shape[1])
     c_mask = np.where(~sample_mask)
-    for row in matrix:
+    for row in matrix[m_slice]:
         if row[c_mask].any():
             continue
         m_sum += row
@@ -36,23 +36,35 @@ def do_sum2(matrix, variant_mask, sample_mask):
         m_tot = m_sum
     return m_sum, m_tot
 
-def do_sum(matrix, variant_mask, sample_mask):
+def make_slices(n_rows):
+    slice1 = slice(0, n_rows // 2)
+    slice2 = slice(n_rows // 2, n_rows)
+    return [slice1, slice2]
+
+from functools import partial
+import multiprocessing
+import concurrent.futures as cfuts
+
+def do_sum(executor, matrix, variant_mask, sample_mask):
+    # make the slices
+    # then send to jobs to work on the slice
+    # then concat
     m_sum = np.zeros(matrix.shape[1])
     m_tot = np.zeros(matrix.shape[1])
-    for msk, row in zip(variant_mask, matrix):
-        if msk:
-            continue
-        m_sum += row
-        if matrix.dtype == bool:
-            m_tot += row
-        else:
-            m_tot += row != 0
-    m_sum *= sample_mask
-    m_tot = sample_mask
+    m_part = partial(do_sum_piece,
+                     matrix=matrix,
+                     variant_mask=variant_mask,
+                     sample_mask=sample_mask)
+    
+    future_results = {executor.submit(m_part, _): _ for _ in make_slices(matrix.shape[0])}
+    for future in cfuts.as_completed(future_results):
+        i = future.result()
+        m_sum += i[0]
+        m_tot += i[1]
     return m_sum, m_tot
 
 
-def calculate_scores(matrix, variant_mask, sample_mask, sample_weights):
+def calculate_scores(executor, matrix, variant_mask, sample_mask, sample_weights):
     """
     calculate the best scoring sample,
     sumfunc is the method to do matrix summation
@@ -62,7 +74,7 @@ def calculate_scores(matrix, variant_mask, sample_mask, sample_weights):
         column index of the highest score
         new_row_count for highest score column index
     """
-    sample_scores, cur_sample_count = do_sum2(matrix, variant_mask, sample_mask)
+    sample_scores, cur_sample_count = do_sum(executor, matrix, variant_mask, sample_mask)
 
     if sample_weights is not None:
         logging.debug("applying weights")
@@ -118,8 +130,9 @@ def greedy_select(matrix,
     num_vars = matrix.shape[0]
 
     tot_captured = 0
+    executor =  cfuts.ThreadPoolExecutor(2)
     for _ in range(select_count):
-        use_sample, new_variant_count = calculate_scores(matrix, variant_mask, sample_mask,
+        use_sample, new_variant_count = calculate_scores(executor, matrix, variant_mask, sample_mask,
                                                          sample_weights)
 
         use_sample_name = vcf_samples[use_sample]
@@ -165,6 +178,8 @@ def greedy_select(matrix,
                 variant_mask = np.zeros(n_matrix.shape[0], dtype='bool')
                 sample_mask = np.ones(n_matrix.shape[1], dtype='bool')
                 matrix = n_matrix
+
+
 
 
 # deprecated for now
