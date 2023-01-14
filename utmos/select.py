@@ -21,6 +21,21 @@ MAXMEM = 2  # in GB
 #############
 # Core code #
 #############
+def do_sum2(matrix, variant_mask, sample_mask):
+    m_sum = np.zeros(matrix.shape[1])
+    m_tot = np.zeros(matrix.shape[1])
+    c_mask = np.where(~sample_mask)
+    for row in matrix:
+        if row[c_mask].any():
+            continue
+        m_sum += row
+        if matrix.dtype != bool:
+            m_tot += row != 0
+    m_sum *= sample_mask
+    if matrix.dtype == bool:
+        m_tot = m_sum
+    return m_sum, m_tot
+
 def do_sum(matrix, variant_mask, sample_mask):
     m_sum = np.zeros(matrix.shape[1])
     m_tot = np.zeros(matrix.shape[1])
@@ -33,7 +48,7 @@ def do_sum(matrix, variant_mask, sample_mask):
         else:
             m_tot += row != 0
     m_sum *= sample_mask
-    m_tot *= sample_mask
+    m_tot = sample_mask
     return m_sum, m_tot
 
 
@@ -47,7 +62,7 @@ def calculate_scores(matrix, variant_mask, sample_mask, sample_weights):
         column index of the highest score
         new_row_count for highest score column index
     """
-    sample_scores, cur_sample_count = do_sum(matrix, variant_mask, sample_mask)
+    sample_scores, cur_sample_count = do_sum2(matrix, variant_mask, sample_mask)
 
     if sample_weights is not None:
         logging.debug("applying weights")
@@ -57,10 +72,10 @@ def calculate_scores(matrix, variant_mask, sample_mask, sample_weights):
     new_variant_count = cur_sample_count[use_sample]
 
     sample_mask[use_sample] = False
-    if matrix.dtype == bool:
-        variant_mask |= matrix[:, use_sample]
-    else:
-        variant_mask |= matrix[:, use_sample] != 0
+    #if matrix.dtype == bool:
+        #variant_mask |= matrix[:, use_sample]
+    #else:
+        #variant_mask |= matrix[:, use_sample] != 0
 
     return use_sample, new_variant_count
 
@@ -119,23 +134,29 @@ def greedy_select(matrix,
             round(tot_captured / num_vars, 4)
         ]
 
-        if not (~variant_mask).any():
+        #if not (~variant_mask).any():
+        if tot_captured >= num_vars:
             logging.warning("Ran out of new variants")
             return
 
         # can mem? put it in
         # need to change shape by how many we could mask
         if isinstance(matrix, h5py.Dataset):
-            n_var = (~variant_mask).sum()
+            n_var = num_vars - tot_captured #(~variant_mask).sum()
             n_samp = sample_mask.sum()
             if is_memsafe((n_var, n_samp)):
                 logging.info("Dataset small enough to hold in memory")
                 n_matrix = np.zeros((n_var, n_samp), dtype=matrix.dtype)
                 m_pos = 0
-                for remove, row in zip(variant_mask, matrix):
-                    if remove: continue
+                #for remove, row in zip(variant_mask, matrix):
+                #    if remove: continue
+                #    n_matrix[m_pos] = row[sample_mask]
+                #    m_pos += 1
+                c_mask = ~sample_mask
+                for row in matrix:
+                    if np.where(c_mask, row, 0).any():
+                        continue
                     n_matrix[m_pos] = row[sample_mask]
-                    m_pos += 1
                 # Drop used samples
                 vcf_samples = vcf_samples[sample_mask]
                 total_variant_count = total_variant_count[sample_mask]
