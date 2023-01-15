@@ -22,9 +22,13 @@ MAXMEM = 2  # in GB
 # Core code #
 #############
 def do_sum(matrix, sample_mask):
+    """
+    Vectorized sum function
+    """
     m_sum = np.zeros(matrix.shape[1])
     m_tot = np.zeros(matrix.shape[1])
-    c_mask = np.where(~sample_mask)
+    # skip variants already used
+    c_mask = np.where(sample_mask == 1)
     for row in matrix:
         if row[c_mask].any():
             continue
@@ -33,8 +37,10 @@ def do_sum(matrix, sample_mask):
             m_tot += row
         else:
             m_tot += row != 0
-    m_sum *= sample_mask
-    m_tot *= sample_mask
+    # mask out excluded samples
+    ex_mask = sample_mask != 2
+    m_sum *= ex_mask
+    m_tot *= ex_mask
     return m_sum, m_tot
 
 
@@ -49,15 +55,12 @@ def calculate_scores(matrix, sample_mask, sample_weights):
         new_row_count for highest score column index
     """
     sample_scores, cur_sample_count = do_sum(matrix, sample_mask)
-
     if sample_weights is not None:
         logging.debug("applying weights")
-        sample_scores = sample_scores * sample_weights
-
+        sample_scores *= sample_weights
     use_sample = np.argmax(sample_scores)
     new_variant_count = cur_sample_count[use_sample]
-
-    sample_mask[use_sample] = False
+    sample_mask[use_sample] = 1
 
     return use_sample, new_variant_count
 
@@ -96,7 +99,6 @@ def greedy_select(matrix,
     Will do an iterative rewrite until is_memsafe == True
     """
     num_vars = matrix.shape[0]
-
     tot_captured = 0
     for _ in range(select_count):
         use_sample, new_variant_count = calculate_scores(matrix, sample_mask, sample_weights)
@@ -121,23 +123,24 @@ def greedy_select(matrix,
         # need to change shape by how many we could mask
         if isinstance(matrix, h5py.Dataset):
             n_var = num_vars - tot_captured
-            n_samp = sample_mask.sum()
+            n_samp = len(sample_mask) - np.count_nonzero(sample_mask)
             if is_memsafe((n_var, n_samp)):
                 logging.info("Dataset small enough to hold in memory")
                 n_matrix = np.zeros((n_var, n_samp), dtype=matrix.dtype)
                 m_pos = 0
-                c_mask = np.where(~sample_mask)
+                c_mask = np.where(sample_mask == 1)
                 for row in matrix:
                     if row[c_mask].any():
                         continue
                     n_matrix[m_pos] = row[sample_mask]
                     m_pos += 1
                 # Drop used samples
-                vcf_samples = vcf_samples[sample_mask]
-                total_variant_count = total_variant_count[sample_mask]
+                sub_mask = sample_mask[sample_mask != 1]
+                vcf_samples = vcf_samples[sub_mask]
+                total_variant_count = total_variant_count[sub_mask]
                 if sample_weights is not None:
-                    sample_weights = sample_weights[sample_mask]
-                sample_mask = np.ones(n_matrix.shape[1], dtype='bool')
+                    sample_weights = sample_weights[sub_mask]
+                sample_mask = sample_mask[sub_mask]
                 matrix = n_matrix
 
 
@@ -170,16 +173,18 @@ def run_selection(data, select_count=0.02, subset=None, exclude=None, weights=No
         vcf_samples = vcf_samples.astype(str)
 
     # Build masks
-    sample_mask = np.ones(num_samples, dtype='bool')
+    # 0 - use, 1 = mask, other = skip
+    sample_mask = np.zeros(num_samples, dtype='uint8')
 
     if subset:
-        sample_mask = np.isin(vcf_samples, subset)
-        logging.info("Subsetting to %d of %d samples", sample_mask.sum(), num_samples)
+        sample_mask = np.where(np.isin(vcf_samples, subset), 0, 2)
+        logging.info("Subsetting to %d samples", len(subset))
     if exclude:
-        logging.info(f"Excluding {len(exclude)} samples")
-        sample_mask &= ~np.isin(vcf_samples, exclude)
-    if subset or exclude:
-        logging.info(f"Ending with {sample_mask.sum()} samples")
+        sample_mask = np.where(np.isin(vcf_samples, exclude), 2, sample_mask)
+        logging.info("Excluding %d samples", len(exclude))
+    if subset and exclude:
+        remain = len(sample_mask) - np.count_nonzero(sample_mask)
+        logging.info("Ending with %d samples", remain)
 
     sample_weights = None
     if weights is not None:

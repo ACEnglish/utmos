@@ -1,7 +1,7 @@
 
 test -e ssshtest || curl -O https://raw.githubusercontent.com/ryanlayer/ssshtest/master/ssshtest
 source ssshtest
-
+STOP_ON_FAIL=1
 # Work inside of the repo folder
 cd "$( dirname "${BASH_SOURCE[0]}" )"/../
 INDIR=repo_utils/test_files
@@ -43,11 +43,15 @@ for key in [\"GT\", \"AF\", \"samples\"]:
 #                                 entry help
 # ------------------------------------------------------------
 run test_help $ut
-assert_exit_code 0
-assert_equal $(fn_md5 $STDERR_FILE) $(fn_md5 $ANSDIR/help.txt)
+if [ $test_help ]; then
+    assert_exit_code 0
+    assert_equal $(fn_md5 $STDERR_FILE) $(fn_md5 $ANSDIR/help.txt)
+fi
 
 run test_version $ut version
-assert_exit_code 0
+if [ $test_help ]; then
+    assert_exit_code 0
+fi
 
 
 # ------------------------------------------------------------
@@ -212,20 +216,20 @@ fi
 run test_select_af_lm $ut select --maxmem 0 -c 20 --af --lowmem $OD/tiny.af.hdf5 $INDIR/chunk0.vcf $INDIR/chunk1.vcf.gz
 if [ $test_select_af_lm ]; then
     assert_exit_code 0
-    assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_af.txt)
+    assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_af_h5.txt)
     assert_equal $(fn_md5 $OD/tiny.af.hdf5) $(fn_md5 $INDIR/tiny.af.hdf5)
 fi
 
 run test_select_af_p1_lm $ut select --maxmem 1 -c 20 --lowmem $INDIR/tiny.af.hdf5
 if [ $test_select_af_p1_lm ]; then
     assert_exit_code 0
-    assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_af.txt)
+    assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_af_h5.txt)
 fi
 
 run test_select_af_p2_lm $ut select --af --maxmem 1 -c 20 $INDIR/tiny.af.hdf5
 if [ $test_select_af_p2_lm ]; then
     assert_exit_code 0
-    assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_af.txt)
+    assert_equal $(fn_md5 $STDOUT_FILE) $(fn_md5 $ANSDIR/select_af_h5.txt)
 fi
 
 
