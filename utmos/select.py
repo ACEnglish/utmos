@@ -147,6 +147,7 @@ def greedy_select(matrix,
             round(tot_captured / num_vars, 4)
         ]
 
+<<<<<<< HEAD
         #if not (~variant_mask).any():
         if tot_captured >= num_vars:
             logging.warning("Ran out of new variants")
@@ -156,6 +157,16 @@ def greedy_select(matrix,
         # need to change shape by how many we could mask
         if isinstance(matrix, h5py.Dataset):
             n_var = num_vars - tot_captured #(~variant_mask).sum()
+=======
+        if not matrix:
+            logging.warning("Ran out of new variants")
+            return
+
+        # can mem? short-circuit
+        # need to change shape by how many we could mask out and then load differently
+        if isinstance(x, h5py._hl.dataset.Dataset):
+            n_var = (~variant_mask).sum()
+>>>>>>> parent of de1310f (code cleaning)
             n_samp = sample_mask.sum()
             if is_memsafe((n_var, n_samp)):
                 logging.info("Dataset small enough to hold in memory")
@@ -189,11 +200,12 @@ def greedy_select(matrix,
 ####################
 # Setup/Management #
 ####################
-def run_selection(data, select_count=0.02, subset=None, exclude=None, weights=None):
+def run_selection(data, select_count=0.02, mode='greedy', subset=None, exclude=None, weights=None):
     """
     Setup the selection calculation
     if select_count [0,1], select that percent of samples
     if select_count >= 1, select that number of samples
+    returns the generator created by the specified mode
     """
     num_vars, num_samples = data["data"].shape
     logging.info("Sample Count %d", num_samples)
@@ -481,13 +493,13 @@ def select_main(cmdargs):
     args.exclude = parse_sample_lists(args.exclude)
     args.weights = parse_weights(args.weights)
 
+    mode = 'greedy_mem' if args.lowmem else 'greedy'
     MAXMEM = args.maxmem
     with open(args.out, 'w') as fout:
         fout.write("sample\tvar_count\tnew_count\ttot_captured\tpct_captured\n")
-        m_iter = run_selection(data, args.count, args.subset, args.exclude, args.weights)
+        m_iter = run_selection(data, args.count, mode, args.subset, args.exclude, args.weights)
         for result in m_iter:
             logging.info("Selected %s (%.1f%% of variants)", result[0], result[4] * 100)
             fout.write("\t".join([str(_) for _ in result]) + '\n')
-            fout.flush()
 
     logging.info("Finished utmos")
