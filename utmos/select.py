@@ -120,7 +120,7 @@ def greedy_select(matrix,
         # can mem? put it in
         # need to change shape by how many we could mask
         if isinstance(matrix, h5py.Dataset):
-            n_var = tot_captured
+            n_var = num_vars - tot_captured
             n_samp = sample_mask.sum()
             if is_memsafe((n_var, n_samp)):
                 logging.info("Dataset small enough to hold in memory")
