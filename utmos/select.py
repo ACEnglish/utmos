@@ -21,11 +21,12 @@ MAXMEM = 2  # in GB
 #############
 # Core code #
 #############
-def do_sum(matrix, variant_mask, sample_mask):
+def do_sum(matrix, sample_mask):
     m_sum = np.zeros(matrix.shape[1])
     m_tot = np.zeros(matrix.shape[1])
-    for msk, row in zip(variant_mask, matrix):
-        if msk:
+    c_mask = np.where(~sample_mask)
+    for row in matrix:
+        if row[c_mask].any():
             continue
         m_sum += row
         if matrix.dtype == bool:
@@ -37,17 +38,17 @@ def do_sum(matrix, variant_mask, sample_mask):
     return m_sum, m_tot
 
 
-def calculate_scores(matrix, variant_mask, sample_mask, sample_weights):
+def calculate_scores(matrix, sample_mask, sample_weights):
     """
     calculate the best scoring sample,
     sumfunc is the method to do matrix summation
 
-    updates sample_mask and variant_mask in place
+    updates sample_mask in place
     returns tuple of:
         column index of the highest score
         new_row_count for highest score column index
     """
-    sample_scores, cur_sample_count = do_sum(matrix, variant_mask, sample_mask)
+    sample_scores, cur_sample_count = do_sum(matrix, sample_mask)
 
     if sample_weights is not None:
         logging.debug("applying weights")
@@ -57,10 +58,6 @@ def calculate_scores(matrix, variant_mask, sample_mask, sample_weights):
     new_variant_count = cur_sample_count[use_sample]
 
     sample_mask[use_sample] = False
-    if matrix.dtype == bool:
-        variant_mask |= matrix[:, use_sample]
-    else:
-        variant_mask |= matrix[:, use_sample] != 0
 
     return use_sample, new_variant_count
 
@@ -82,7 +79,6 @@ def greedy_select(matrix,
                   total_variant_count,
                   select_count,
                   vcf_samples,
-                  variant_mask,
                   sample_mask,
                   sample_weights=None):
     """
@@ -92,7 +88,6 @@ def greedy_select(matrix,
     matrix:              genotype data
     total_variant_count: total number of variants per-sample
     select_count:        how many samples we'll be selecting
-    vcf_samples:         identifiers of sample names (len == gt_matrix.shape[1])
     variant_mask:        boolean matrix of variants where True == used
     sample_mask:         boolean matrix of samples where True == use
     sample_weights:      (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
@@ -104,8 +99,7 @@ def greedy_select(matrix,
 
     tot_captured = 0
     for _ in range(select_count):
-        use_sample, new_variant_count = calculate_scores(matrix, variant_mask, sample_mask,
-                                                         sample_weights)
+        use_sample, new_variant_count = calculate_scores(matrix, sample_mask, sample_weights)
 
         use_sample_name = vcf_samples[use_sample]
         variant_count = total_variant_count[use_sample]
@@ -119,21 +113,23 @@ def greedy_select(matrix,
             round(tot_captured / num_vars, 4)
         ]
 
-        if not (~variant_mask).any():
+        if tot_captured >= num_vars:
             logging.warning("Ran out of new variants")
             return
 
         # can mem? put it in
         # need to change shape by how many we could mask
         if isinstance(matrix, h5py.Dataset):
-            n_var = (~variant_mask).sum()
+            n_var = tot_captured
             n_samp = sample_mask.sum()
             if is_memsafe((n_var, n_samp)):
                 logging.info("Dataset small enough to hold in memory")
                 n_matrix = np.zeros((n_var, n_samp), dtype=matrix.dtype)
                 m_pos = 0
-                for remove, row in zip(variant_mask, matrix):
-                    if remove: continue
+                c_mask = np.where(~sample_mask)
+                for row in matrix:
+                    if row[c_mask].any():
+                        continue
                     n_matrix[m_pos] = row[sample_mask]
                     m_pos += 1
                 # Drop used samples
@@ -141,7 +137,6 @@ def greedy_select(matrix,
                 total_variant_count = total_variant_count[sample_mask]
                 if sample_weights is not None:
                     sample_weights = sample_weights[sample_mask]
-                variant_mask = np.zeros(n_matrix.shape[0], dtype='bool')
                 sample_mask = np.ones(n_matrix.shape[1], dtype='bool')
                 matrix = n_matrix
 
@@ -175,7 +170,6 @@ def run_selection(data, select_count=0.02, subset=None, exclude=None, weights=No
         vcf_samples = vcf_samples.astype(str)
 
     # Build masks
-    variant_mask = np.zeros(num_vars, dtype='bool')
     sample_mask = np.ones(num_samples, dtype='bool')
 
     if subset:
@@ -201,7 +195,7 @@ def run_selection(data, select_count=0.02, subset=None, exclude=None, weights=No
         logging.info("Dataset small enough to hold in memory")
         matrix = matrix[:]
 
-    return greedy_select(matrix, data["var_count"][:], select_count, vcf_samples, variant_mask, sample_mask, sample_weights)
+    return greedy_select(matrix, data["var_count"][:], select_count, vcf_samples, sample_mask, sample_weights)
 
 
 def write_append_hdf5(cur_part, out_name, is_first=False, calc_af=False):
