@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: 3.9
       - name: Cache python
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ env.pythonLocation }}
           key: ${{ env.pythonLocation }}-${{ hashFiles('setup.py') }}
@@ -35,7 +35,7 @@ jobs:
         run: |
           python repo_utils/pylint_maker.py
       - name: Uploading badges
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: htmlcov
           path: test_results/htmlcov
