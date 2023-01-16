@@ -12,12 +12,18 @@ import joblib
 import truvari
 import numpy as np
 import pandas as pd
-
 from utmos.convert import read_vcf
 
 MAXMEM = 2  # in GB
 NCORES = 8
-
+###
+# DASK
+###
+import dask
+from dask.distributed import Client, LocalCluster
+client = Client(n_workers=4, threads_per_worker=2, processes=False,
+                memory_limit='25GB', scheduler_port=0, 
+                silence_logs=True, diagnostics_port=0)
 
 #############
 # Core code #
@@ -80,7 +86,11 @@ def calculate_scores(matrix, sample_mask, sample_weights, executor):
         column index of the highest score
         new_row_count for highest score column index
     """
-    sample_scores, cur_sample_count = do_sum_thread(matrix, sample_mask, executor)
+    #sample_scores, cur_sample_count = do_sum_thread(matrix, sample_mask, executor)
+    m_part = partial(do_sum, sample_mask=sample_mask)
+    delay = dask.delayed(m_part)
+    sample_scores, cur_sample_count = delay(matrix).compute(scheduler=client)
+
     if sample_weights is not None:
         logging.debug("applying weights")
         sample_scores *= sample_weights
@@ -126,7 +136,8 @@ def greedy_select(matrix,
     """
     num_vars = matrix.shape[0]
     tot_captured = 0
-    executor =  cfuts.ThreadPoolExecutor(NCORES)
+    #executor =  cfuts.ThreadPoolExecutor(NCORES)
+    executor = None
     for _ in range(select_count):
         use_sample, new_variant_count = calculate_scores(matrix, sample_mask, sample_weights, executor)
 
@@ -237,7 +248,8 @@ def write_append_hdf5(cur_part, out_name, is_first=False, calc_af=False):
     n_cols = cur_part['GT'].shape[1]
     # Consider turning 1e6 into a parameter?
     # Or maybe just turning chunking off..
-    c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
+    #c_size = (max(1, int(1e6 / 4 / n_cols)), n_cols)
+    c_size = (50000, n_cols)
 
     if is_first:
         with h5py.File(out_name, 'w') as hf:
