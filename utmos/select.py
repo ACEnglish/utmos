@@ -16,6 +16,7 @@ import pandas as pd
 from utmos.convert import read_vcf
 
 MAXMEM = 2  # in GB
+NCORES = 8
 
 
 #############
@@ -42,9 +43,34 @@ def do_sum(matrix, sample_mask):
     m_sum *= ex_mask
     m_tot *= ex_mask
     return m_sum, m_tot
+def do_sum_slice(m_slice, matrix, sample_mask):
+    """
+    """
+    return do_sum(matrix[m_slice], sample_mask)
 
+def make_slices(n_rows):
+    for i in range(0, n_rows, n_rows // NCORES):
+        yield slice(i, i + n_rows // NCORES)
 
-def calculate_scores(matrix, sample_mask, sample_weights):
+from multiprocessing.pool import ThreadPool
+from functools import partial
+import concurrent.futures as cfuts
+
+def do_sum_thread(matrix, sample_mask, executor, threads=1):
+    m_part = partial(do_sum_slice,
+                     matrix=matrix,
+                     sample_mask=sample_mask)
+    future_results = {executor.submit(m_part, _): _ for _ in make_slices(matrix.shape[0])}
+    m_sum = np.zeros(matrix.shape[1])
+    m_tot = np.zeros(matrix.shape[1])
+
+    for future in cfuts.as_completed(future_results):
+        i = future.result()
+        m_sum += i[0]
+        m_tot += i[1]
+    return m_sum, m_tot
+
+def calculate_scores(matrix, sample_mask, sample_weights, executor):
     """
     calculate the best scoring sample,
     sumfunc is the method to do matrix summation
@@ -54,7 +80,7 @@ def calculate_scores(matrix, sample_mask, sample_weights):
         column index of the highest score
         new_row_count for highest score column index
     """
-    sample_scores, cur_sample_count = do_sum(matrix, sample_mask)
+    sample_scores, cur_sample_count = do_sum_thread(matrix, sample_mask, executor)
     if sample_weights is not None:
         logging.debug("applying weights")
         sample_scores *= sample_weights
@@ -100,8 +126,9 @@ def greedy_select(matrix,
     """
     num_vars = matrix.shape[0]
     tot_captured = 0
+    executor =  cfuts.ThreadPoolExecutor(NCORES)
     for _ in range(select_count):
-        use_sample, new_variant_count = calculate_scores(matrix, sample_mask, sample_weights)
+        use_sample, new_variant_count = calculate_scores(matrix, sample_mask, sample_weights, executor)
 
         use_sample_name = vcf_samples[use_sample]
         variant_count = total_variant_count[use_sample]
@@ -167,7 +194,7 @@ def run_selection(data, select_count=0.02, subset=None, exclude=None, weights=No
     logging.info("Selecting %d samples", select_count)
 
     vcf_samples = data['samples']
-    if isinstance(data, h5py.File):
+    if isinstance(data, h5py.File) or isinstance(data['samples'], zarr.Array):
         vcf_samples = data['samples'][:].astype(str)
     else:
         vcf_samples = vcf_samples.astype(str)
@@ -200,7 +227,7 @@ def run_selection(data, select_count=0.02, subset=None, exclude=None, weights=No
         logging.info("Dataset small enough to hold in memory")
         matrix = matrix[:]
 
-    return greedy_select(matrix, data["var_count"][:], select_count, vcf_samples, sample_mask, sample_weights)
+    return greedy_select(matrix, data["var_count"][:], select_count, vcf_samples[:], sample_mask, sample_weights)
 
 
 def write_append_hdf5(cur_part, out_name, is_first=False, calc_af=False):
@@ -245,6 +272,48 @@ def add_varcount_to_h5(fn, var_count):
     with h5py.File(fn, 'a') as hf:
         hf.create_dataset('var_count', data=var_count, compression="lzf")
 
+import zarr
+def write_append_zarr(cur_part, out_name, is_first=False, calc_af=False):
+    """
+    Consolidate parts into the hdf5 file
+    """
+    n_cols = cur_part['GT'].shape[1]
+    # Consider turning 1e6 into a parameter?
+    # Or maybe just turning chunking off..
+    c_size = (max(1, int(5e6 / 4 / n_cols)), n_cols)
+    if is_first:
+        root = zarr.group(out_name)
+        root.create_dataset('samples', data=cur_part["samples"], chunks=True)
+        if not calc_af:
+            root.create_dataset('data',
+                                data=cur_part["GT"],
+                                #compression="lzf",
+                                dtype='bool',
+                                chunks=c_size)
+        else:
+            root.create_dataset('data',
+                                data=cur_part["GT"] * cur_part["AF"],
+                                #compression="lzf",
+                                dtype='float32',
+                                chunks=c_size)
+        #zarr.save(root, out_name + '.zarr')
+        return
+    data = zarr.open(out_name)
+    #data["data"].resize((data["data"].shape[0] + cur_part["GT"].shape[0]), axis=0)
+    data["data"].resize((data["data"].shape[0] + cur_part["GT"].shape[0], cur_part["GT"].shape[1]))
+    if not calc_af:
+        data["data"][-cur_part["GT"].shape[0]:] = cur_part["GT"]
+    else:
+        data["data"][-cur_part["GT"].shape[0]:] = cur_part["GT"] * cur_part["AF"]
+
+def add_varcount_to_zarr(fn, var_count):
+    """
+    Add the new var_count dataset to the h5 file
+    """
+    data = zarr.open(fn)
+    data.create_dataset('var_count', data=var_count)
+
+
 #pylint: disable=too-many-statements
 def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
     """
@@ -256,7 +325,9 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
     """
     logging.info(f"Loading {len(in_files)} files")
     if lowmem == 1:
-        return h5py.File(in_files[0], 'r')
+        #if in_files[0].endswith('h5')
+        #return h5py.File(in_files[0], 'r')
+        return zarr.open(in_files[0]) #h5py.File(in_files[0], 'r')
 
     samples = None
     gt_parts = []
@@ -302,7 +373,8 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
             else:
                 cur_chunk = {'GT': gt_parts[0], 'samples': samples, 'AF': af_parts[0]}
 
-            write_append_hdf5(cur_chunk, lowmem, is_first, calc_af)
+            #write_append_hdf5(cur_chunk, lowmem, is_first, calc_af)
+            write_append_zarr(cur_chunk, lowmem, is_first, calc_af)
 
             load_buffer_count = 0
             is_first = False
@@ -315,8 +387,10 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
 
     if lowmem is not None:
         # Need to write the var_count to the h5file
-        add_varcount_to_h5(lowmem, var_count)
-        return h5py.File(lowmem, 'r')
+        #add_varcount_to_h5(lowmem, var_count)
+        add_varcount_to_zarr(lowmem, var_count)
+        return zarr.open(lowmem)
+        #return h5py.File(lowmem, 'r')
 
     ret = {'samples': samples}
     ret['data'] = np.concatenate(gt_parts) if len(gt_parts) > 1 else gt_parts[0]
