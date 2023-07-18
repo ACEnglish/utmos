@@ -37,8 +37,8 @@ def do_sum(matrix, sample_mask):
             m_tot += row
         else:
             m_tot += row != 0
-    # mask out excluded samples
-    ex_mask = sample_mask != 2
+    # mask out excluded/used samples
+    ex_mask = sample_mask == 0
     m_sum *= ex_mask
     m_tot *= ex_mask
     return m_sum, m_tot
@@ -49,7 +49,7 @@ def calculate_scores(matrix, sample_mask, sample_weights):
     calculate the best scoring sample,
     sumfunc is the method to do matrix summation
 
-    updates sample_mask in place
+    updates sample_mask in place (shouldn't be here)
     returns tuple of:
         column index of the highest score
         new_row_count for highest score column index

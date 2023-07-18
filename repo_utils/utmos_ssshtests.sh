@@ -1,7 +1,7 @@
 
 test -e ssshtest || curl -O https://raw.githubusercontent.com/ryanlayer/ssshtest/master/ssshtest
 source ssshtest
-STOP_ON_FAIL=1
+#STOP_ON_FAIL=1
 # Work inside of the repo folder
 cd "$( dirname "${BASH_SOURCE[0]}" )"/../
 INDIR=repo_utils/test_files
