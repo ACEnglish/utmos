@@ -17,7 +17,6 @@ from utmos.convert import read_vcf
 
 MAXMEM = 2  # in GB
 
-
 #############
 # Core code #
 #############
@@ -49,7 +48,6 @@ def calculate_scores(matrix, sample_mask, sample_weights):
     calculate the best scoring sample,
     sumfunc is the method to do matrix summation
 
-    updates sample_mask in place (shouldn't be here)
     returns tuple of:
         column index of the highest score
         new_row_count for highest score column index
@@ -60,7 +58,6 @@ def calculate_scores(matrix, sample_mask, sample_weights):
         sample_scores *= sample_weights
     use_sample = np.argmax(sample_scores)
     new_variant_count = cur_sample_count[use_sample]
-    sample_mask[use_sample] = 1
 
     return use_sample, new_variant_count
 
@@ -91,8 +88,8 @@ def greedy_select(matrix,
     matrix:              genotype data
     total_variant_count: total number of variants per-sample
     select_count:        how many samples we'll be selecting
-    variant_mask:        boolean matrix of variants where True == used
-    sample_mask:         boolean matrix of samples where True == use
+    vcf_samples:         list of sample names, lines up with sample_mask
+    sample_mask:         int matrix for samples where 0 == yet to be selected
     sample_weights:      (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
 
     Expects input matrices to be h5py Datasets.
@@ -106,6 +103,7 @@ def greedy_select(matrix,
         use_sample_name = vcf_samples[use_sample]
         variant_count = total_variant_count[use_sample]
         tot_captured += new_variant_count
+        sample_mask[use_sample] = 1
 
         yield [
             use_sample_name,
