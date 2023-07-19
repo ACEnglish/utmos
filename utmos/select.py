@@ -33,7 +33,7 @@ def do_sum(matrix, sample_mask):
         if row[c_mask].any():
             continue
         m_score += row
-        m_count += row != 0
+        m_count += (row != 0).astype('int')
     # mask out excluded/used samples
     m_score[sample_mask != 1] = 0
     return m_score, m_count
