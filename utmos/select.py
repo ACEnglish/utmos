@@ -318,7 +318,7 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
     if calc_af:
         logging.info("Calculating AF Matrix")
         af_arr = np.concatenate(af_parts) if len(af_parts) > 1 else af_parts[0]
-        ret["data"] = ret["data"] * af_arr
+        ret["data"] = ret["data"].astype(float) * af_arr
     return ret
 #pylint: enable=too-many-statements
 
