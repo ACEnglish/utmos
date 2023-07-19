@@ -29,17 +29,17 @@ def do_sum(matrix, sample_mask):
     m_count = np.zeros(matrix.shape[1], dtype='int')
     # skip variants already used
     c_mask = np.where(sample_mask == 0)
-    for row in matrix:
+    for row, af in zip(matrix, afs):
         if row[c_mask].any():
             continue
         m_score += row
         m_count += (row != 0).astype('int')
     # mask out excluded/used samples
-    m_score[sample_mask != 1] = 0
-    return m_score, m_count
+    m_count[sample_mask != 1] = 0
+    return m_count
 
 
-def calculate_scores(matrix, sample_mask, sample_weights):
+def calculate_scores(matrix, sample_mask, allele_freqs=None, sample_weights=None):
     """
     calculate the best scoring sample,
     sumfunc is the method to do matrix summation
@@ -48,7 +48,11 @@ def calculate_scores(matrix, sample_mask, sample_weights):
         column index of the highest score
         new_row_count for highest score column index
     """
-    scores, counts = do_sum(matrix, sample_mask)
+    counts = do_sum(matrix, sample_mask)
+    scores = counts if allele_freqs is None and sample_weights is None else np.copy(counts)
+    if allele_freqs is not None:
+        scores *= allele_freqs
+            
     if sample_weights is not None:
         logging.debug("applying weights")
         scores *= sample_weights
@@ -318,7 +322,7 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
     if calc_af:
         logging.info("Calculating AF Matrix")
         af_arr = np.concatenate(af_parts) if len(af_parts) > 1 else af_parts[0]
-        ret["data"] = ret["data"].astype(float) * af_arr
+        ret["data"] = ret["data"] * af_arr #ret["data"].astype(float) * af_arr
     return ret
 #pylint: enable=too-many-statements
 
