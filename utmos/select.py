@@ -26,7 +26,7 @@ def do_sum(matrix, sample_mask):
     Vectorized sum function
     """
     m_score = np.zeros(matrix.shape[1])
-    m_count = np.zeros(matrix.shape[1])
+    m_count = np.zeros(matrix.shape[1], dtype='int')
     # skip variants already used
     c_mask = np.where(sample_mask == 0)
     for row in matrix:
