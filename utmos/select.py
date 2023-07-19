@@ -273,7 +273,8 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
         if samples is None:
             samples = dat['samples'].astype('S')
 
-        upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples'])).astype(bool)
+        m_type = float if calc_af else bool
+        upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples'])).astype(m_type)
         uninf_filter = upack.any(axis=1)
         logging.debug("fitering %d uninformative variants", (~uninf_filter).sum())
 
@@ -318,7 +319,7 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
     if calc_af:
         logging.info("Calculating AF Matrix")
         af_arr = np.concatenate(af_parts) if len(af_parts) > 1 else af_parts[0]
-        ret["data"] = ret["data"] * af_arr #ret["data"].astype(float) * af_arr
+        ret["data"] *= af_arr
     return ret
 #pylint: enable=too-many-statements
 
