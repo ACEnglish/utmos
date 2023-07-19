@@ -82,7 +82,7 @@ def read_vcf(in_file, lowmem=False, chunk_length=2000, no_singleton=False):
         data["GT"] = v_count
     data["AF"] = af
     data["GT"] = np.packbits(data["GT"], axis=1)
-    
+
     data["stats"] = {'num_het': num_hets, 'num_hom': num_homs}
     return data
 

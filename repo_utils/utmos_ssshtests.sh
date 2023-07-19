@@ -194,6 +194,8 @@ fi
 #                                 select lowmem
 # ------------------------------------------------------------
 
+run test_select_lm_big $ut select --maxmem 0 --lowmem $OD/tiny.hdf5 $INDIR/chunk*.jl
+
 run test_select_lm $ut select --maxmem 0 --lowmem $OD/tiny.hdf5 $INDIR/chunk2.vcf
 if [ $test_select_lm ]; then
     assert_exit_code 0
