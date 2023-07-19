@@ -29,17 +29,17 @@ def do_sum(matrix, sample_mask):
     m_count = np.zeros(matrix.shape[1], dtype='int')
     # skip variants already used
     c_mask = np.where(sample_mask == 0)
-    for row, af in zip(matrix, afs):
+    for row in matrix:
         if row[c_mask].any():
             continue
         m_score += row
         m_count += (row != 0).astype('int')
     # mask out excluded/used samples
     m_count[sample_mask != 1] = 0
-    return m_count
+    return m_score, m_count
 
 
-def calculate_scores(matrix, sample_mask, allele_freqs=None, sample_weights=None):
+def calculate_scores(matrix, sample_mask, sample_weights=None):
     """
     calculate the best scoring sample,
     sumfunc is the method to do matrix summation
@@ -48,11 +48,7 @@ def calculate_scores(matrix, sample_mask, allele_freqs=None, sample_weights=None
         column index of the highest score
         new_row_count for highest score column index
     """
-    counts = do_sum(matrix, sample_mask)
-    scores = counts if allele_freqs is None and sample_weights is None else np.copy(counts)
-    if allele_freqs is not None:
-        scores *= allele_freqs
-            
+    scores, counts = do_sum(matrix, sample_mask)
     if sample_weights is not None:
         logging.debug("applying weights")
         scores *= sample_weights
