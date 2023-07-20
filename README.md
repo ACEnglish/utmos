@@ -159,6 +159,11 @@ the concatenation/conversion work. Simply provide a single `in_file` of `file.hd
 parameter `--lowmem file.hdf5`. Note that if you create an hdf5 file with `select --af`, it will hold the AF weighted
 matrix and can only be reused with `select --af`.
 
+## Multi-allelic VCFs
+When running `select --af`, variant positions are weighed by their allele frequency. For multi-allelic VCFs, the site is
+weighed by the largest allele frequency observed. If this is not the desired behavior, split multi-allelics in the VCF 
+with `bcftools norm -N -m-any`.
+
 ## Performace metrics
 Running on a 2013 Mac Pro and using chr22 from 1kgp genotype  
 `ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502//ALL.chr22.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz`
