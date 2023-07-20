@@ -21,24 +21,6 @@ MAXMEM = 2  # in GB
 #############
 # Core code #
 #############
-def do_sum(matrix, sample_mask):
-    """
-    Vectorized sum function
-    """
-    m_score = np.zeros(matrix.shape[1])
-    m_count = np.zeros(matrix.shape[1], dtype='int')
-    # skip variants already used
-    c_mask = np.where(sample_mask == 0)
-    for row in matrix:
-        if row[c_mask].any():
-            continue
-        m_score += row
-        m_count += (row != 0).astype('int')
-    # mask out excluded/used samples
-    m_score[sample_mask != 1] = 0
-    return m_score, m_count
-
-
 def calculate_scores(matrix, sample_mask, sample_weights=None):
     """
     calculate the best scoring sample,
@@ -48,13 +30,26 @@ def calculate_scores(matrix, sample_mask, sample_weights=None):
         column index of the highest score
         new_row_count for highest score column index
     """
-    scores, counts = do_sum(matrix, sample_mask)
+    scores = np.zeros(matrix.shape[1])
+    counts = np.zeros(matrix.shape[1], dtype='int')
+    # skip variants already used
+    c_mask = np.where(sample_mask == 0)
+    for row in matrix:
+        if row[c_mask].any():
+            continue
+        scores += row
+        counts += (row != 0).astype('int')
+    # mask out excluded/used samples
+    scores[sample_mask != 1] = 0
+
     if sample_weights is not None:
         logging.debug("applying weights")
         scores *= sample_weights
     use_sample = np.argmax(scores)
     new_variant_count = counts[use_sample]
-
+    # Backwards compatibility for data without max-alt-af convert
+    if scores[use_sample] == 0:
+        return None, None
     return use_sample, new_variant_count
 
 
@@ -95,7 +90,10 @@ def greedy_select(matrix,
     tot_captured = 0
     for _ in range(select_count):
         use_sample, new_variant_count = calculate_scores(matrix, sample_mask, sample_weights)
-
+        if use_sample is None:
+            # Backwards compatibility for data without max-alt-af convert
+            logging.warning("Ran out of new variants (multi-allelics)")
+            break
         use_sample_name = vcf_samples[use_sample]
         variant_count = total_variant_count[use_sample]
         tot_captured += new_variant_count
@@ -273,8 +271,8 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
         if samples is None:
             samples = dat['samples'].astype('S')
 
-        m_type = float if calc_af else bool
-        upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples'])).astype(m_type)
+        #m_type = float if calc_af else bool
+        upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples'])).astype(bool)
         uninf_filter = upack.any(axis=1)
         logging.debug("fitering %d uninformative variants", (~uninf_filter).sum())
 
@@ -319,7 +317,7 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
     if calc_af:
         logging.info("Calculating AF Matrix")
         af_arr = np.concatenate(af_parts) if len(af_parts) > 1 else af_parts[0]
-        ret["data"] *= af_arr
+        ret["data"] = ret["data"] * af_arr
     return ret
 #pylint: enable=too-many-statements
 
