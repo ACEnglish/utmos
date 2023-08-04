@@ -16,52 +16,40 @@ import pandas as pd
 from utmos.convert import read_vcf
 
 MAXMEM = 2  # in GB
-
+# set to 0 to h5 once and then pull in memory for test coverage
 
 #############
 # Core code #
 #############
-def do_sum(matrix, sample_mask):
-    """
-    Vectorized sum function
-    """
-    m_sum = np.zeros(matrix.shape[1])
-    m_tot = np.zeros(matrix.shape[1])
-    # skip variants already used
-    c_mask = np.where(sample_mask == 1)
-    for row in matrix:
-        if row[c_mask].any():
-            continue
-        m_sum += row
-        if matrix.dtype == bool:
-            m_tot += row
-        else:
-            m_tot += row != 0
-    # mask out excluded samples
-    ex_mask = sample_mask != 2
-    m_sum *= ex_mask
-    m_tot *= ex_mask
-    return m_sum, m_tot
-
-
-def calculate_scores(matrix, sample_mask, sample_weights):
+def calculate_scores(matrix, sample_mask, sample_weights=None):
     """
     calculate the best scoring sample,
     sumfunc is the method to do matrix summation
 
-    updates sample_mask in place
     returns tuple of:
         column index of the highest score
         new_row_count for highest score column index
     """
-    sample_scores, cur_sample_count = do_sum(matrix, sample_mask)
+    scores = np.zeros(matrix.shape[1])
+    counts = np.zeros(matrix.shape[1], dtype='int')
+    # skip variants already used
+    c_mask = np.where(sample_mask == 0)
+    for row in matrix:
+        if row[c_mask].any():
+            continue
+        scores += row
+        counts += (row != 0).astype('int')
+    # mask out excluded/used samples
+    scores[sample_mask != 1] = 0
+
     if sample_weights is not None:
         logging.debug("applying weights")
-        sample_scores *= sample_weights
-    use_sample = np.argmax(sample_scores)
-    new_variant_count = cur_sample_count[use_sample]
-    sample_mask[use_sample] = 1
-
+        scores *= sample_weights
+    use_sample = np.argmax(scores)
+    new_variant_count = counts[use_sample]
+    # Backwards compatibility for data without max-alt-af convert
+    if scores[use_sample] == 0:
+        return None, None
     return use_sample, new_variant_count
 
 
@@ -91,8 +79,8 @@ def greedy_select(matrix,
     matrix:              genotype data
     total_variant_count: total number of variants per-sample
     select_count:        how many samples we'll be selecting
-    variant_mask:        boolean matrix of variants where True == used
-    sample_mask:         boolean matrix of samples where True == use
+    vcf_samples:         list of sample names, lines up with sample_mask
+    sample_mask:         matrix for samples where 1 == can be selected
     sample_weights:      (optional) the weights to apply to each iteration's sample.sum (len == gt_matrix.shape[0])
 
     Expects input matrices to be h5py Datasets.
@@ -102,10 +90,14 @@ def greedy_select(matrix,
     tot_captured = 0
     for _ in range(select_count):
         use_sample, new_variant_count = calculate_scores(matrix, sample_mask, sample_weights)
-
+        if use_sample is None:
+            # Backwards compatibility for data without max-alt-af convert
+            logging.warning("Ran out of new variants (multi-allelics)")
+            break
         use_sample_name = vcf_samples[use_sample]
         variant_count = total_variant_count[use_sample]
         tot_captured += new_variant_count
+        sample_mask[use_sample] = 0
 
         yield [
             use_sample_name,
@@ -122,26 +114,27 @@ def greedy_select(matrix,
         # can mem? put it in
         # need to change shape by how many we could mask
         if isinstance(matrix, h5py.Dataset):
-            n_var = num_vars - tot_captured
-            n_samp = len(sample_mask) - np.count_nonzero(sample_mask)
-            if is_memsafe((n_var, n_samp)):
+            n_var = int(num_vars - tot_captured)
+            n_samp = (sample_mask == 1).sum()
+            if is_memsafe((n_var, n_samp)) or MAXMEM == 0:
                 logging.info("Dataset small enough to hold in memory")
-                n_matrix = np.zeros((n_var, n_samp), dtype=matrix.dtype)
-                m_pos = 0
-                c_mask = np.where(sample_mask == 1)
-                for row in matrix:
-                    if row[c_mask].any():
-                        continue
-                    n_matrix[m_pos] = row[sample_mask]
-                    m_pos += 1
                 # Drop used samples
-                sub_mask = sample_mask[sample_mask != 1]
-                vcf_samples = vcf_samples[sub_mask]
-                total_variant_count = total_variant_count[sub_mask]
+                s_mask = sample_mask == 1
+                vcf_samples = vcf_samples[s_mask]
+                total_variant_count = total_variant_count[s_mask]
                 if sample_weights is not None:
-                    sample_weights = sample_weights[sub_mask]
-                sample_mask = sample_mask[sub_mask]
+                    sample_weights = sample_weights[s_mask]
+                # subset samples/variants
+                n_matrix = np.zeros((n_var, n_samp), dtype=matrix.dtype)
+                inspect = np.where(sample_mask == 0)
+                m_pos = 0
+                for row in matrix:
+                    if row[inspect].any():
+                        continue
+                    n_matrix[m_pos] = row[s_mask]
+                    m_pos += 1
                 matrix = n_matrix
+                sample_mask = np.ones(n_samp, dtype='bool')
 
 
 # deprecated for now
@@ -172,18 +165,17 @@ def run_selection(data, select_count=0.02, subset=None, exclude=None, weights=No
     else:
         vcf_samples = vcf_samples.astype(str)
 
-    # Build masks
-    # 0 - use, 1 = mask, other = skip
-    sample_mask = np.zeros(num_samples, dtype='uint8')
+    # 1 = can use, 0 = mask, 2 = exclude
+    sample_mask = np.ones(num_samples, dtype='uint8')
 
     if subset:
-        sample_mask = np.where(np.isin(vcf_samples, subset), 0, 2)
+        sample_mask = np.where(np.isin(vcf_samples, subset), 1, 2)
         logging.info("Subsetting to %d samples", len(subset))
     if exclude:
         sample_mask = np.where(np.isin(vcf_samples, exclude), 2, sample_mask)
         logging.info("Excluding %d samples", len(exclude))
     if subset and exclude:
-        remain = len(sample_mask) - np.count_nonzero(sample_mask)
+        remain = len(sample_mask) - (sample_mask == 1).sum()
         logging.info("Ending with %d samples", remain)
 
     sample_weights = None
@@ -196,7 +188,7 @@ def run_selection(data, select_count=0.02, subset=None, exclude=None, weights=No
 
     matrix = data['data']
 
-    if isinstance(data, h5py.File) and is_memsafe(matrix.shape):
+    if isinstance(data, h5py.File) and is_memsafe(matrix.shape) and MAXMEM != 0:
         logging.info("Dataset small enough to hold in memory")
         matrix = matrix[:]
 
@@ -279,6 +271,7 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
         if samples is None:
             samples = dat['samples'].astype('S')
 
+        #m_type = float if calc_af else bool
         upack = np.unpackbits(dat['GT'], axis=1, count=len(dat['samples'])).astype(bool)
         uninf_filter = upack.any(axis=1)
         logging.debug("fitering %d uninformative variants", (~uninf_filter).sum())
@@ -325,7 +318,6 @@ def load_files(in_files, lowmem=None, buffer=32768, calc_af=False):
         logging.info("Calculating AF Matrix")
         af_arr = np.concatenate(af_parts) if len(af_parts) > 1 else af_parts[0]
         ret["data"] = ret["data"] * af_arr
-
     return ret
 #pylint: enable=too-many-statements
 

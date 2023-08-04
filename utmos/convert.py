@@ -71,7 +71,8 @@ def read_vcf(in_file, lowmem=False, chunk_length=2000, no_singleton=False):
     v_count = is_het | is_hom
 
     logging.info("Calculating AFs")
-    af = gts.count_alleles().to_frequencies()[:, 1]
+    # Use maximum non-reference allele frequency
+    af = gts.count_alleles().to_frequencies()[:, 1:].max(axis=1)
     # Needs to be reshaped for future multiplications
     af = af.reshape(af.shape[0], 1)
 
@@ -81,7 +82,6 @@ def read_vcf(in_file, lowmem=False, chunk_length=2000, no_singleton=False):
         del data["calldata/GT"]
         data["GT"] = v_count
     data["AF"] = af
-
     data["GT"] = np.packbits(data["GT"], axis=1)
 
     data["stats"] = {'num_het': num_hets, 'num_hom': num_homs}
